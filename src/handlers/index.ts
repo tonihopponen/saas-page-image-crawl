@@ -32,15 +32,39 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       await putObject(key, homepage);
     }
 
-    return {
-      statusCode: 200,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        source_url: url,
-        scraped_at: new Date().toISOString(),
-        homepage,
-      }),
-    };
+/* STEP 2 – GPT-4.1 link filtering */
+const homepageLinks: string[] = homepage.links ?? [];
+const filteredLinks = await filterHomepageLinks(homepageLinks);
+
+/* STEP 3 – Firecrawl the top 4 links */
+const top4 = filteredLinks.slice(0, 4);
+
+const pages = await Promise.all(
+  top4.map(async (link) => {
+    const page = await firecrawlScrape(link, {
+      onlyMainContent: true,
+      formats: ['rawHTML'],
+    });
+    return { link, rawHTML: page.rawHTML ?? '' };
+  })
+);
+
+/* TEMP output so we can inspect it */
+return {
+  statusCode: 200,
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    source_url: url,
+    generated_at: new Date().toISOString(),
+    homepage_summary: {
+      rawHTML_bytes: homepage.rawHTML?.length ?? 0,
+      link_count: homepageLinks.length,
+      gpt_kept: top4,
+    },
+    scraped_pages: pages,
+  }),
+};
+   
   } catch (err: any) {
     return {
       statusCode: 400,

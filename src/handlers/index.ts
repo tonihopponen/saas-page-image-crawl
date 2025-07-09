@@ -17,18 +17,23 @@ export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
     if (!/^https?:$/.test(u.protocol)) throw new Error('url must start with http/https');
 
     /* ---------- STEP 1 – Firecrawl homepage (cached) ---------- */
+    console.log('Step 1: Starting Firecrawl scrape for', url);
     const key = `${sha256(url)}/homepage.json`;
     let homepage = await getObject<any>(key);
     if (!homepage) {
+      console.log('Step 1: No cached data, scraping fresh');
       homepage = await firecrawlScrape(url, {
         onlyMainContent: false,
         formats: ['rawHTML', 'links', 'metadata'],
       });
       // Store with 24h TTL (86400 seconds)
       await putObject(key, homepage, 86400);
+    } else {
+      console.log('Step 1: Using cached data');
     }
 
     // --- og:image logic: check for og:image in metadata and enqueue if large enough ---
+    console.log('Step 1.5: Checking for og:image');
     let ogImage: { url: string; width?: number; height?: number } | undefined;
     if (homepage.metadata && homepage.metadata['og:image']) {
       const ogUrl = homepage.metadata['og:image'];
@@ -36,17 +41,22 @@ export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
         const result = await probe(ogUrl);
         if (result && (result.width >= 600 || result.height >= 600)) {
           ogImage = { url: ogUrl, width: result.width, height: result.height };
+          console.log('Step 1.5: Found valid og:image', ogUrl);
         }
       } catch (e) {
+        console.log('Step 1.5: og:image check failed:', e);
         // ignore errors, just skip og:image if can't fetch
       }
     }
 
     /* ---------- STEP 2 – GPT-4.1 link filter ---------- */
+    console.log('Step 2: Filtering homepage links');
     const homepageLinks: string[] = homepage.links ?? [];
     const keptLinks = (await filterHomepageLinks(homepageLinks)).slice(0, 4);
+    console.log('Step 2: Kept links:', keptLinks);
 
     /* ---------- STEP 3 – Firecrawl top-4 pages ---------- */
+    console.log('Step 3: Scraping top pages');
     const pages = await Promise.all(
       keptLinks.map(async (link) => {
         const page = await firecrawlScrape(link, {
@@ -56,8 +66,10 @@ export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
         return { link, rawHTML: page.rawHTML ?? '' };
       })
     );
+    console.log('Step 3: Scraped', pages.length, 'pages');
 
     /* ---------- STEP 4 – harvest & dedupe images ---------- */
+    console.log('Step 4: Parsing and deduplicating images');
     let imgs = parseImages(homepage.rawHTML ?? '', url);
     // If og:image is valid and not already in imgs, add it
     if (ogImage && !imgs.some(img => img.url === ogImage!.url)) {
@@ -67,9 +79,12 @@ export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
     // For testing: limit to 5 unique images (was 50 in production)
     const uniqueImgs = await dedupeImages(imgs.slice(0, 100)); // ≤ 5 items after dedupe
     const limitedImgs = uniqueImgs.slice(0, 5); // hard cap for test
+    console.log('Step 4: Found', limitedImgs.length, 'unique images');
 
     /* ---------- STEP 5 – GPT-o4-mini image analysis ---------- */
+    console.log('Step 5: Analyzing images with AI');
     const aiData = await analyseImages(limitedImgs);
+    console.log('Step 5: AI analysis complete');
 
     const imagesFinal = limitedImgs.map((raw) => {
       const ai = aiData.find((a) => a.url === raw.url);
@@ -83,6 +98,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
       };
     });
 
+    console.log('Final: Returning', imagesFinal.length, 'images');
     /* ---------- FINAL response ---------- */
     return {
       statusCode: 200,
@@ -94,9 +110,13 @@ export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
       }),
     };
   } catch (err: any) {
+    console.error('Lambda error:', err);
     return {
       statusCode: 400,
-      body: JSON.stringify({ error: err.message ?? 'unknown error' }),
+      body: JSON.stringify({ 
+        error: err.message ?? 'unknown error',
+        details: err.response?.data || err.stack || 'No additional details'
+      }),
     };
   }
 };

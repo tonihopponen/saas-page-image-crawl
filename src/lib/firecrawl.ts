@@ -66,7 +66,7 @@ export async function firecrawlScrape(
       console.log('Firecrawl: No rawHTML field in response');
     }
     
-    return data;
+    return (data as any).data ?? data;   // unwrap v1 response
   } catch (error: any) {
     console.error('Firecrawl: Error details:');
     console.error('  Status:', error.response?.status);

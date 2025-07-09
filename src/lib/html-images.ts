@@ -30,9 +30,13 @@ export function parseImages(html: string, landingPage: string): RawImage[] {
   const push = (raw: string, alt?: string, ctx?: string) => {
     const abs = absolutify(raw, landingPage);
     if (!abs) return;
-    if (!/\.jpe?g$|\.png$|\.webp$|\.gif$/i.test(abs)) return;
+
+    // ✅ accept .jpg/.png/.webp/.gif even when followed by ?query=string
+    if (!/\.(jpe?g|png|webp|gif)(\?|$)/i.test(abs)) return;
+
     if (/(sprite|icon|logo|favicon|avatar|testimonial)/i.test(abs)) return;
     if (pushed.has(abs)) return;
+
     pushed.add(abs);
     out.push({ url: abs, landingPage, alt, context: ctx });
   };

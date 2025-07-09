@@ -58,10 +58,22 @@ export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
     }
 
     /* ---------- STEP 2 – GPT-4.1 link filter ---------- */
-    console.log('Step 2: Filtering homepage links');
     const homepageLinks: string[] = homepage.links ?? [];
-    const keptLinks = (await filterHomepageLinks(homepageLinks)).slice(0, 4);
-    console.log('Step 2: Kept links:', keptLinks);
+
+    // Count how many links Firecrawl gave us
+    console.info('Step 1: Firecrawl link count:', homepageLinks.length);          // 🐞
+
+    // Call GPT to keep only product-image pages
+    const gptRaw = await filterHomepageLinks(homepageLinks);                      // returns string[]
+
+    // Safeguard: if GPT returned a string instead of JSON, log it
+    if (!Array.isArray(gptRaw)) {
+      console.warn('Step 2: GPT output was not an array:', gptRaw);               // 🐞
+    }
+
+    // Slice to top-4 and log
+    const keptLinks = (Array.isArray(gptRaw) ? gptRaw : []).slice(0, 4);
+    console.info('Step 2: Kept links:', keptLinks);                               // 🐞
 
     /* ---------- STEP 3 – Firecrawl top-4 pages ---------- */
     console.log('Step 3: Scraping top pages');

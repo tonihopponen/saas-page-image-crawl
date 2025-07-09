@@ -15,6 +15,8 @@ export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
     if (!url) throw new Error('url missing');
     const u = new URL(url);
     if (!/^https?:$/.test(u.protocol)) throw new Error('url must start with http/https');
+    
+    console.log('Debug: force_refresh parameter:', force_refresh);
 
     // Debug: Check if API keys are set (masked for security)
     const firecrawlKey = process.env.FIRECRAWL_API_KEY;
@@ -29,6 +31,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
     const key = `${sha256(url)}/homepage.json`;
     let homepage = await getObject<any>(key);
     
+    console.log('Step 1: Cache check - homepage exists:', !!homepage, 'force_refresh:', force_refresh);
     if (!homepage || force_refresh) {
       console.log('Step 1: No cached data or force refresh, scraping fresh');
       homepage = await firecrawlScrape(url, {

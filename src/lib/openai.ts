@@ -118,15 +118,20 @@ Respond with JSON only—no commentary.`,
       model: 'gpt-4o-mini',     // vision-capable lightweight model
       temperature: 0.3,
       messages,
-      max_tokens: 400,
+      max_tokens: 10000,
     });
 
+    let raw = resp.choices[0].message.content ?? '[]';
+
+    // 🔄 strip ```json … ``` or ```…``` fences
+    raw = raw.replace(/```json|```/gi, '').trim();
+
     try {
-      const json = JSON.parse(resp.choices[0].message.content ?? '[]');
+      const json = JSON.parse(raw);
       out.push(...json);
     } catch (err) {
-      console.error('analyseImages: JSON parse error', err);
-      // push placeholders so ordering stays intact
+      console.error('analyseImages: JSON parse error', err, raw.slice(0, 100));
+      // fallback stub so ordering stays intact
       batch.forEach((b) =>
         out.push({
           url: b.url,

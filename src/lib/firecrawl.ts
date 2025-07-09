@@ -20,19 +20,46 @@ export async function firecrawlScrape(
   }
   
   try {
+    const requestBody = { url, ...options };
+    console.log('Firecrawl: Request body:', JSON.stringify(requestBody, null, 2));
+    
+    const headers = { 
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      'User-Agent': 'saas-image-crawl/1.0.0'
+    };
+    console.log('Firecrawl: Request headers:', {
+      'Authorization': `Bearer ${apiKey.substring(0, 10)}...`,
+      'Content-Type': headers['Content-Type'],
+      'User-Agent': headers['User-Agent']
+    });
+    
     const { data } = await axios.post<FirecrawlResponse>(
       'https://api.firecrawl.dev/v1/scrape',
-      { url, ...options },                                     // ← flatten
+      requestBody,
       { 
-        headers: { 
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-          'User-Agent': 'saas-image-crawl/1.0.0'
-        },
+        headers,
         timeout: 30000 // 30 second timeout
       }
     );
+    
     console.log('Firecrawl: Success - Response keys:', Object.keys(data));
+    console.log('Firecrawl: Full response data:', JSON.stringify(data, null, 2));
+    
+    // Log specific fields we care about
+    if (data.links) {
+      console.log('Firecrawl: Links found:', data.links.length);
+      console.log('Firecrawl: First few links:', data.links.slice(0, 5));
+    } else {
+      console.log('Firecrawl: No links field in response');
+    }
+    
+    if (data.rawHTML) {
+      console.log('Firecrawl: RawHTML length:', data.rawHTML.length);
+    } else {
+      console.log('Firecrawl: No rawHTML field in response');
+    }
+    
     return data;
   } catch (error: any) {
     console.error('Firecrawl: Error details:');

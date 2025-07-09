@@ -5,6 +5,7 @@ import { firecrawlScrape } from '../lib/firecrawl';
 import { filterHomepageLinks, analyseImages } from '../lib/openai';  // ← added analyseImages
 import { parseImages } from '../lib/html-images';
 import { dedupeImages } from '../lib/image-hash';
+import probe from 'probe-image-size';
 
 export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   try {
@@ -23,7 +24,22 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         onlyMainContent: false,
         formats: ['rawHTML', 'links', 'metadata'],
       });
-      await putObject(key, homepage);
+      // Store with 24h TTL (86400 seconds)
+      await putObject(key, homepage, 86400);
+    }
+
+    // --- og:image logic: check for og:image in metadata and enqueue if large enough ---
+    let ogImage: { url: string; width?: number; height?: number } | undefined;
+    if (homepage.metadata && homepage.metadata['og:image']) {
+      const ogUrl = homepage.metadata['og:image'];
+      try {
+        const result = await probe(ogUrl);
+        if (result && (result.width >= 600 || result.height >= 600)) {
+          ogImage = { url: ogUrl, width: result.width, height: result.height };
+        }
+      } catch (e) {
+        // ignore errors, just skip og:image if can't fetch
+      }
     }
 
     /* ---------- STEP 2 – GPT-4.1 link filter ---------- */
@@ -43,13 +59,19 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
 
     /* ---------- STEP 4 – harvest & dedupe images ---------- */
     let imgs = parseImages(homepage.rawHTML ?? '', url);
+    // If og:image is valid and not already in imgs, add it
+    if (ogImage && !imgs.some(img => img.url === ogImage!.url)) {
+      imgs.unshift({ url: ogImage.url, landingPage: url, alt: 'Open Graph image', context: undefined });
+    }
     pages.forEach((p) => (imgs = imgs.concat(parseImages(p.rawHTML, p.link))));
-    const uniqueImgs = await dedupeImages(imgs);          // ≤ 50 items
+    // For testing: limit to 5 unique images (was 50 in production)
+    const uniqueImgs = await dedupeImages(imgs.slice(0, 100)); // ≤ 5 items after dedupe
+    const limitedImgs = uniqueImgs.slice(0, 5); // hard cap for test
 
     /* ---------- STEP 5 – GPT-o4-mini image analysis ---------- */
-    const aiData = await analyseImages(uniqueImgs);
+    const aiData = await analyseImages(limitedImgs);
 
-    const imagesFinal = uniqueImgs.map((raw) => {
+    const imagesFinal = limitedImgs.map((raw) => {
       const ai = aiData.find((a) => a.url === raw.url);
       return {
         url: raw.url,

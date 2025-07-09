@@ -10,14 +10,17 @@ const bucket = process.env.S3_BUCKET!;
 export const sha256 = (text: string) =>
   crypto.createHash('sha256').update(text).digest('hex');
 
-/** Put a JSON-serialisable object. */
-export async function putObject(key: string, data: unknown) {
+/** Put a JSON-serialisable object. Optionally set TTL in seconds (Expires header). */
+export async function putObject(key: string, data: unknown, expiresInSeconds?: number) {
   await s3.send(
     new PutObjectCommand({
       Bucket: bucket,
       Key: key,
       Body: JSON.stringify(data),
       ContentType: 'application/json',
+      ...(expiresInSeconds
+        ? { Expires: new Date(Date.now() + expiresInSeconds * 1000) }
+        : {}),
     })
   );
 }

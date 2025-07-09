@@ -15,14 +15,29 @@ You are a SaaS marketing expert.
 
 Your task is to find pages that are most likely to include product images. Product images are defined as visual representations of the SaaS interface, widgets, or embeds as seen by users or in mockups (e.g. dashboards, social media feeds, review widgets, or galleries).
 
-Instructions:
+Input:
+- Homepage links
+
 1. Analyse the list of links submitted
-2. Remove links that are unlikely to have product images:
-   - Legal, company info, login/CTA, social, blog, docs, etc.
-3. Prioritise the remaining links in descending likelihood of containing marketing-grade product images.
-4. Exclude the homepage itself.
-5. Keep only one /compare/ page if many exist.
-6. Ignore links that differ only by # fragments.
+
+2. Remove all links that won't have any product images. Common examples:
+- Legal and compliance: privacy policy, terms, GDPR, DPA, security
+- Company info: about us, contact, team, press, investor relations
+- Account/CTA pages: login, sign up, free trial, book a demo, subscribe, referrals
+- Third-party or social links: links to Facebook, LinkedIn, Instagram, YouTube, Twitter, etc.
+- Resources and educational content: blog posts, case studies, templates, playbooks, webinars, events
+- Developer tools: API docs, integration pages, developer portals
+- Localization: alternate language or country-specific versions
+- Pricing: plans, pricing pages
+
+3. List the remaining links in a priority order:
+- List the links that are most likely to include product images at the top
+
+Important instructions:
+- Exclude the homepage (e.g. https://example.com/) from the final output
+- Only include pages with marketing-grade product images
+- If multiple links start with /compare/, keep only the most general or representative comparison page (e.g. /compare/flockler-alternative)
+- Ignore URLs that only differ by # fragment
 
 Answer in *JSON array only*—no extra text.
 `;
@@ -85,7 +100,7 @@ For each image you will receive:
 - optional surrounding or alt text
 
 Return a JSON array (same order) with:
-  - "alt": concise, marketing-ready alt text
+  - "alt": a very detailed, marketing-ready alt text
   - "type": "ui_screenshot" or "lifestyle"
   - "confidence": number 0-1 indicating suitability for a product landing page
 

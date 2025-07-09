@@ -21,7 +21,10 @@ export async function firecrawlScrape(
   
   try {
     const requestBody = { url, ...options };
-    console.log('Firecrawl: Request body:', JSON.stringify(requestBody, null, 2));
+    console.log(
+      'Firecrawl: Request body (abbrev):',
+      JSON.stringify(requestBody, null, 2).slice(0, 500) + ' …'
+    );
     
     const headers = { 
       'Authorization': `Bearer ${apiKey}`,
@@ -44,7 +47,10 @@ export async function firecrawlScrape(
     );
     
     console.log('Firecrawl: Success - Response keys:', Object.keys(data));
-    console.log('Firecrawl: Full response data:', JSON.stringify(data, null, 2));
+    console.log(
+      'Firecrawl: Full response (abbrev):',
+      JSON.stringify(data, null, 2).slice(0, 800) + ' …'
+    );
     
     // Log specific fields we care about
     if (data.links) {

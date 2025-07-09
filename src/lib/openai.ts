@@ -29,7 +29,7 @@ Answer in *JSON array only*—no extra text.
 
 export async function filterHomepageLinks(links: string[]): Promise<string[]> {
   const { choices } = await openai.chat.completions.create({
-    model: 'gpt-4o-2025-05-15',          // GPT-4.1 alias
+    model: 'gpt-4.1',          // GPT-4.1 model
     temperature: 0.2,
     messages: [
       { role: 'system', content: FILTER_SYSTEM_PROMPT.trim() },

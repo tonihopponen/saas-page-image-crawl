@@ -1,48 +1,52 @@
 import axios from 'axios';
 import imageHash from 'image-hash';
+import crypto from 'crypto';
 import { RawImage } from './html-images';
 
-type HashResult = { img: RawImage; hash: string };
+/** Hamming distance between two hex strings */
+const ham = (a: string, b: string) =>
+  (BigInt('0x' + a) ^ BigInt('0x' + b)).toString(2).replace(/0/g, '').length;
 
-/** Async wrapper for image-hash (pHash 16×16 → 64-bit hex) */
-function computePHash(url: string): Promise<string> {
-  return new Promise((res, rej) => {
-    imageHash
-      .imageHash(url, 16, true, (err: any, hash: string) => {
+/** Compute pHash; fall back to SHA-256 if the library fails */
+async function getHash(url: string): Promise<string> {
+  try {
+    return await new Promise<string>((res, rej) => {
+      imageHash.imageHash(url, 16, true, (err: any, hash: string) => {
         if (err) rej(err);
         else res(hash);
       });
-  });
-}
-
-/** Hamming distance between two hex strings */
-function hamming(a: string, b: string): number {
-  const n1 = BigInt('0x' + a);
-  const n2 = BigInt('0x' + b);
-  return (n1 ^ n2).toString(2).replace(/0/g, '').length;
+    });
+  } catch {
+    // pHash failed (SVG, 403, etc.) – fall back to fast SHA-256 of the URL
+    return crypto.createHash('sha256').update(url).digest('hex');
+  }
 }
 
 /**
- * Download each image, compute pHash, drop near-duplicates.
- * – distance ≤ 8 considered duplicate
- * – returns *same order* as input (keeps first winner)
+ * Download each image (GET), compute pHash (or SHA-256), drop near duplicates.
+ * - No HEAD check: many CDNs block it.
+ * - Distance ≤ 8 treated as duplicate.
+ * - Stops after `limit` uniques (50 default).
  */
-export async function dedupeImages(imgs: RawImage[]): Promise<(RawImage & { hash: string })[]> {
-  const uniques: HashResult[] = [];
+export async function dedupeImages(
+  imgs: RawImage[],
+  limit = 50
+): Promise<(RawImage & { hash: string })[]> {
+  const uniques: { img: RawImage; hash: string }[] = [];
 
   for (const img of imgs) {
     try {
-      // quick HEAD check to skip tiny files < 5 kB
-      const head = await axios.head(img.url, { timeout: 8000 });
-      if ((+head.headers['content-length'] || 0) < 5_000) continue;
+      // small GET with 10-second timeout
+      await axios.get(img.url, { responseType: 'arraybuffer', timeout: 10_000 });
 
-      const hash = await computePHash(img.url);
-      if (uniques.some((u) => hamming(u.hash, hash) <= 8)) continue; // duplicate
+      const canonical = img.url.split('?')[0];   // ignore ?w=1440&fm=webp
+      const hash = await getHash(canonical);
+      if (uniques.some((u) => ham(u.hash, hash) <= 8)) continue; // near-dup
 
       uniques.push({ img, hash });
-      if (uniques.length >= 50) break; // cap for "shallow" mode
-    } catch {
-      /* ignore failed downloads */
+      if (uniques.length >= limit) break;
+    } catch (err) {
+      /* ignore 403/404/timeout/etc. */
     }
   }
 

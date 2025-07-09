@@ -31,9 +31,7 @@ export function parseImages(html: string, landingPage: string): RawImage[] {
     if (!raw) return;
     const abs = absolutify(raw, landingPage);
     if (!abs) return;
-
-    // ❌  removed the extension test – HEAD check in dedupeImages will
-    //     drop anything that isn't Content-Type: image/*
+    // extension filter REMOVED — we rely on HEAD content-type later
 
     if (/(sprite|icon|logo|favicon|avatar|testimonial)/i.test(abs)) return;
     if (pushed.has(abs)) return;

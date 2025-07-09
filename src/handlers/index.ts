@@ -3,6 +3,7 @@ import { APIGatewayProxyHandlerV2 } from 'aws-lambda';
 import { sha256, getObject, putObject } from '../lib/s3';
 import { firecrawlScrape } from '../lib/firecrawl';
 import { filterHomepageLinks, analyseImages } from '../lib/openai';  // ← added analyseImages
+import { gptExtractImages } from '../lib/gpt-image-extract';
 import { parseImages } from '../lib/html-images';
 import { dedupeImages } from '../lib/image-hash';
 
@@ -75,16 +76,21 @@ export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
     console.log('Step 3: Scraped', pages.length, 'pages');
 
     /* ---------- STEP 4 – harvest & dedupe images ---------- */
-    console.log('Step 4: Parsing and deduplicating images');
     let imgs = parseImages(homepage.rawHTML ?? '', url);
-    pages.forEach((p) => {
-      imgs = imgs.concat(parseImages(p.rawHTML, p.link));
-      console.info(`➜ ${p.link} →`, imgs.length, 'images so far');
-    });
-    console.info('Step 4: raw images harvested:', imgs.length);
-    // For testing: limit to 5 unique images (was 50 in production)
-    const uniqueImgs = await dedupeImages(imgs.slice(0, 100)); // ≤ 5 items after dedupe
-    console.info('Step 4: after HEAD + pHash dedupe:', uniqueImgs.length);
+    pages.forEach((p) => (imgs = imgs.concat(parseImages(p.rawHTML, p.link))));
+    console.info('Step 4a: regex parser found', imgs.length, 'images');
+
+    if (imgs.length === 0) {
+      // 🧠 Fallback to GPT-4o-mini
+      console.info('Step 4b: invoking GPT fallback');
+      const htmlAll = (homepage.rawHTML ?? '') + pages.map((p) => p.rawHTML).join('\n');
+      const gptUrls = await gptExtractImages(htmlAll, url);
+      imgs = gptUrls.map((u: string) => ({ url: u, landingPage: url }));
+      console.info('Step 4b: GPT returned', gptUrls.length, 'URLs');
+    }
+
+    const uniqueImgs = await dedupeImages(imgs);   // HEAD + pHash
+    console.info('Step 4c: unique images after dedupe:', uniqueImgs.length);
     const limitedImgs = uniqueImgs.slice(0, 5); // hard cap for test
     console.log('Step 4: Found', limitedImgs.length, 'unique images');
 

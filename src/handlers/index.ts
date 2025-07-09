@@ -32,7 +32,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
       console.log('Step 1: No cached data, scraping fresh');
       homepage = await firecrawlScrape(url, {
         onlyMainContent: false,
-        formats: ['rawHTML', 'links', 'metadata'],
+        formats: ['rawHtml', 'links', 'metadata'],
       });
       // Store with 24h TTL (86400 seconds)
       await putObject(key, homepage, 86400);
@@ -69,7 +69,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
       keptLinks.map(async (link) => {
         const page = await firecrawlScrape(link, {
           onlyMainContent: true,
-          formats: ['rawHTML'],
+          formats: ['rawHtml'],
         });
         return { link, rawHTML: page.rawHTML ?? '' };
       })

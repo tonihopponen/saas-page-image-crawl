@@ -22,7 +22,7 @@ export async function firecrawlScrape(
   try {
     const { data } = await axios.post<FirecrawlResponse>(
       'https://api.firecrawl.dev/v1/scrape',
-      { url, options },
+      { url, ...options },                                     // ← flatten
       { 
         headers: { 
           'Authorization': `Bearer ${apiKey}`,
@@ -42,7 +42,7 @@ export async function firecrawlScrape(
     console.error('  Request URL:', error.config?.url);
     console.error('  Request Method:', error.config?.method);
     console.error('  Request Headers:', {
-      'x-api-key': error.config?.headers?.['x-api-key']?.substring(0, 10) + '...',
+      'Authorization': error.config?.headers?.['Authorization']?.substring(0, 20) + '...',
       'Content-Type': error.config?.headers?.['Content-Type'],
       'User-Agent': error.config?.headers?.['User-Agent']
     });

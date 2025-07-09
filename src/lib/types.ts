@@ -1,6 +1,6 @@
 export interface FirecrawlOptions {
   onlyMainContent: boolean;
-  formats: ('rawHTML' | 'links' | 'metadata')[];
+  formats: ('rawHtml' | 'links' | 'metadata')[];
 }
 
 export interface FirecrawlResponse {

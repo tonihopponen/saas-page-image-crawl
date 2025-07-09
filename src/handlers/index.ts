@@ -76,15 +76,16 @@ export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
     console.log('Step 3: Scraped', pages.length, 'pages');
 
     /* ---------- STEP 4 – harvest & dedupe images ---------- */
-    let imgs = parseImages(homepage.rawHTML ?? '', url);
+    let imgs = parseImages(homepage.rawHtml ?? '', url);
     pages.forEach((p) => (imgs = imgs.concat(parseImages(p.rawHTML, p.link))));
     console.info('Step 4a: regex parser found', imgs.length, 'images');
 
     if (imgs.length === 0) {
-      // 🧠 Fallback to GPT-4o-mini
+      // 🧠 FALLBACK: use GPT-4o-mini to pull URLs from raw HTML
       console.info('Step 4b: invoking GPT fallback');
-      const htmlAll = (homepage.rawHTML ?? '') + pages.map((p) => p.rawHTML).join('\n');
-      const gptUrls = await gptExtractImages(htmlAll, url);
+      const htmlAll =
+        (homepage.rawHtml ?? '') + pages.map((p) => p.rawHTML).join('\n');
+      const gptUrls = await gptExtractImages(htmlAll, url);     // ← text-only call
       imgs = gptUrls.map((u: string) => ({ url: u, landingPage: url }));
       console.info('Step 4b: GPT returned', gptUrls.length, 'URLs');
     }

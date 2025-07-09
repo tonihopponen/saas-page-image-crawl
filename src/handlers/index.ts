@@ -16,6 +16,14 @@ export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
     const u = new URL(url);
     if (!/^https?:$/.test(u.protocol)) throw new Error('url must start with http/https');
 
+    // Debug: Check if API keys are set (masked for security)
+    const firecrawlKey = process.env.FIRECRAWL_API_KEY;
+    const openaiKey = process.env.OPENAI_API_KEY;
+    console.log('Debug: Firecrawl API key present:', !!firecrawlKey);
+    console.log('Debug: OpenAI API key present:', !!openaiKey);
+    console.log('Debug: Firecrawl key starts with:', firecrawlKey?.substring(0, 10) + '...');
+    console.log('Debug: Deployment version:', process.env.DEPLOYMENT_VERSION);
+
     /* ---------- STEP 1 – Firecrawl homepage (cached) ---------- */
     console.log('Step 1: Starting Firecrawl scrape for', url);
     const key = `${sha256(url)}/homepage.json`;

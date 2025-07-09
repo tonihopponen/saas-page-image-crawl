@@ -6,7 +6,12 @@ export async function firecrawlScrape(
   url: string,
   options: FirecrawlOptions
 ): Promise<FirecrawlResponse> {
-  console.log('Firecrawl: Starting scrape for URL:', url);
+  // Add cache-busting timestamp to force fresh data
+  const cacheBustUrl = url.includes('?') 
+    ? `${url}&_cb=${Date.now()}` 
+    : `${url}?_cb=${Date.now()}`;
+  console.log('Firecrawl: Original URL:', url);
+  console.log('Firecrawl: Cache-busted URL:', cacheBustUrl);
   console.log('Firecrawl: Options:', JSON.stringify(options));
   
   const apiKey = process.env.FIRECRAWL_API_KEY?.trim();
@@ -20,7 +25,7 @@ export async function firecrawlScrape(
   }
   
   try {
-    const requestBody = { url, ...options };
+    const requestBody = { url: cacheBustUrl, ...options };
     console.log(
       'Firecrawl: Request body (abbrev):',
       JSON.stringify(requestBody, null, 2).slice(0, 500) + ' …'

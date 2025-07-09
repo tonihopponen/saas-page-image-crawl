@@ -1,5 +1,6 @@
 import { JSDOM } from 'jsdom';
 
+/** Returned by the scraper BEFORE dedupe */
 export interface RawImage {
   url: string;
   landingPage: string;
@@ -8,48 +9,64 @@ export interface RawImage {
 }
 
 /**
- * Extract image-like URLs from raw HTML.
- * – img[src]
- * – source[srcset]
- * – inline style="background-image:url(..)"
- * Excludes obvious sprites/icons/logos via filename keywords or very small dims later.
+ * Convert a (possibly relative) path to an absolute URL
  */
+function absolutify(url: string, base: string): string {
+  try {
+    return new URL(url, base).href;
+  } catch {
+    return '';            // ignore malformed urls
+  }
+}
+
 export function parseImages(html: string, landingPage: string): RawImage[] {
   if (!html) return [];
-  const dom = new JSDOM(html);
-  const doc = dom.window.document;
+
+  const doc = new JSDOM(html).window.document;
   const out: RawImage[] = [];
 
-  /** helper */
-  const pushUnique = (url: string, alt?: string, context?: string) => {
-    if (!url) return;
-    if (!/\.jpe?g$|\.png$|\.webp$/i.test(url)) return; // allowed formats
-    if (/(sprite|icon|logo|favicon|avatar|testimonial)/i.test(url)) return;
-    out.push({ url, landingPage, alt, context });
+  /** helper that de-dupes *within this page* */
+  const pushed = new Set<string>();
+  const push = (raw: string, alt?: string, ctx?: string) => {
+    const abs = absolutify(raw, landingPage);
+    if (!abs) return;
+    if (!/\.jpe?g$|\.png$|\.webp$|\.gif$/i.test(abs)) return;
+    if (/(sprite|icon|logo|favicon|avatar|testimonial)/i.test(abs)) return;
+    if (pushed.has(abs)) return;
+    pushed.add(abs);
+    out.push({ url: abs, landingPage, alt, context: ctx });
   };
 
-  /* <img> */
+  /* -------------------- <img> -------------------- */
   doc.querySelectorAll('img').forEach((img) => {
-    const src = img.getAttribute('src') || '';
-    const alt = img.getAttribute('alt') || undefined;
-    // nearest text around the image (simplified)
-    const context = img.parentElement?.textContent?.trim().slice(0, 120) || undefined;
-    pushUnique(src, alt, context);
+    const alt = img.getAttribute('alt') ?? undefined;
+    const ctx  = img.parentElement?.textContent?.trim().slice(0, 120) ?? undefined;
+    // 1️⃣ normal src
+    if (img.getAttribute('src')) push(img.getAttribute('src')!, alt, ctx);
+    // 2️⃣ lazy-loaded
+    if (img.getAttribute('data-src'))     push(img.getAttribute('data-src')!, alt, ctx);
+    if (img.getAttribute('data-original'))push(img.getAttribute('data-original')!, alt, ctx);
+    if (img.getAttribute('data-lazy'))    push(img.getAttribute('data-lazy')!, alt, ctx);
   });
 
-  /* <source srcset> – take the first candidate */
+  /* -------------------- <source srcset> -------------------- */
   doc.querySelectorAll('source').forEach((s) => {
-    const ss = s.getAttribute('srcset') || '';
-    const first = ss.split(',')[0]?.trim().split(' ')[0] || '';
-    pushUnique(first);
+    // normal srcset
+    const ss = s.getAttribute('srcset') ?? s.getAttribute('data-srcset') ?? '';
+    const first = ss.split(',')[0].trim().split(' ')[0];
+    if (first) push(first);
   });
 
-  /* inline background-image URLs */
+  /* -------------------- inline CSS -------------------- */
   doc.querySelectorAll<HTMLElement>('[style*="background-image"]').forEach((el) => {
     const style = el.getAttribute('style')!;
-    const m = /background-image:\s*url\(["']?(.*?)["']?\)/i.exec(style);
-    if (m?.[1]) pushUnique(m[1]);
+    const m = /background-image:\s*url\([\"']?(.*?)[\"']?\)/i.exec(style);
+    if (m?.[1]) push(m[1]);
   });
+
+  /* -------------------- <meta property="og:image"> -------------------- */
+  const og = doc.querySelector('meta[property="og:image"]')?.getAttribute('content');
+  if (og) push(og);
 
   return out;
 }

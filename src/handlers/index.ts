@@ -1,3 +1,4 @@
+import { filterHomepageLinks } from '../lib/openai';
 import { APIGatewayProxyHandlerV2 } from 'aws-lambda';
 import { sha256, getObject, putObject } from '../lib/s3';
 import { firecrawlScrape } from '../lib/firecrawl';

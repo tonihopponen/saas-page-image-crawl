@@ -81,9 +81,10 @@ export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
       imgs = imgs.concat(parseImages(p.rawHTML, p.link));
       console.info(`➜ ${p.link} →`, imgs.length, 'images so far');
     });
-    console.info('Step 4: Harvested', imgs.length, 'raw images before dedupe');
+    console.info('Step 4: raw images harvested:', imgs.length);
     // For testing: limit to 5 unique images (was 50 in production)
     const uniqueImgs = await dedupeImages(imgs.slice(0, 100)); // ≤ 5 items after dedupe
+    console.info('Step 4: after HEAD + pHash dedupe:', uniqueImgs.length);
     const limitedImgs = uniqueImgs.slice(0, 5); // hard cap for test
     console.log('Step 4: Found', limitedImgs.length, 'unique images');
 

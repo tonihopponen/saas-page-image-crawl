@@ -27,12 +27,20 @@ export function parseImages(html: string, landingPage: string): RawImage[] {
 
   /** helper that de-dupes *within this page* */
   const pushed = new Set<string>();
-  const push = (raw: string, alt?: string, ctx?: string) => {
+  const push = (raw: string | null, alt?: string, ctx?: string) => {
+    if (!raw) return;
     const abs = absolutify(raw, landingPage);
     if (!abs) return;
 
-    // ✅ accept .jpg/.png/.webp/.gif even when followed by ?query=string
-    if (!/\.(jpe?g|png|webp|gif)(\?|$)/i.test(abs)) return;
+    /* ✅ Accept URLs that…
+       – end with .jpg | .jpeg | .png | .webp | .gif
+       – OR have ?format=jpg|jpeg|png|webp|gif anywhere in the query string */
+    if (
+      !/\.(jpe?g|png|webp|gif)(\?|$)/i.test(abs) &&
+      !/[?&](?:format|fm)=(jpe?g|png|webp|gif)/i.test(abs)
+    ) {
+      return;
+    }
 
     if (/(sprite|icon|logo|favicon|avatar|testimonial)/i.test(abs)) return;
     if (pushed.has(abs)) return;
@@ -44,13 +52,12 @@ export function parseImages(html: string, landingPage: string): RawImage[] {
   /* -------------------- <img> -------------------- */
   doc.querySelectorAll('img').forEach((img) => {
     const alt = img.getAttribute('alt') ?? undefined;
-    const ctx  = img.parentElement?.textContent?.trim().slice(0, 120) ?? undefined;
-    // 1️⃣ normal src
-    if (img.getAttribute('src')) push(img.getAttribute('src')!, alt, ctx);
-    // 2️⃣ lazy-loaded
-    if (img.getAttribute('data-src'))     push(img.getAttribute('data-src')!, alt, ctx);
-    if (img.getAttribute('data-original'))push(img.getAttribute('data-original')!, alt, ctx);
-    if (img.getAttribute('data-lazy'))    push(img.getAttribute('data-lazy')!, alt, ctx);
+    const ctx = img.parentElement?.textContent?.trim().slice(0, 120) ?? undefined;
+
+    push(img.getAttribute('src'), alt, ctx);           // normal
+    push(img.getAttribute('data-src'), alt, ctx);      // lazy-load ①
+    push(img.getAttribute('data-original'), alt, ctx); // lazy-load ②
+    push(img.getAttribute('data-lazy'), alt, ctx);     // lazy-load ③
   });
 
   /* -------------------- <source srcset> -------------------- */

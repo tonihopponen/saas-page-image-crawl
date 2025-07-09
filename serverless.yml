@@ -10,6 +10,7 @@ provider:
     S3_BUCKET: ${self:service}-data
     FIRECRAWL_API_KEY: ${env:FIRECRAWL_API_KEY}
     OPENAI_API_KEY: ${env:OPENAI_API_KEY}
+    DEPLOYMENT_VERSION: ${env:DEPLOYMENT_VERSION, 'v1.0.1'}
   iamRoleStatements:
     - Effect: Allow
       Action:

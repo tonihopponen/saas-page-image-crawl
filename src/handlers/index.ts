@@ -5,7 +5,6 @@ import { firecrawlScrape } from '../lib/firecrawl';
 import { filterHomepageLinks, analyseImages } from '../lib/openai';  // ← added analyseImages
 import { parseImages } from '../lib/html-images';
 import { dedupeImages } from '../lib/image-hash';
-import probe from 'probe-image-size';
 
 export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
   try {
@@ -32,29 +31,12 @@ export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
       console.log('Step 1: No cached data, scraping fresh');
       homepage = await firecrawlScrape(url, {
         onlyMainContent: false,
-        formats: ['rawHtml', 'links'],
+        formats: ['links', 'rawHtml'],
       });
       // Store with 24h TTL (86400 seconds)
       await putObject(key, homepage, 86400);
     } else {
       console.log('Step 1: Using cached data');
-    }
-
-    // --- og:image logic: check for og:image in metadata and enqueue if large enough ---
-    console.log('Step 1.5: Checking for og:image');
-    let ogImage: { url: string; width?: number; height?: number } | undefined;
-    if (homepage.metadata && homepage.metadata['og:image']) {
-      const ogUrl = homepage.metadata['og:image'];
-      try {
-        const result = await probe(ogUrl);
-        if (result && (result.width >= 600 || result.height >= 600)) {
-          ogImage = { url: ogUrl, width: result.width, height: result.height };
-          console.log('Step 1.5: Found valid og:image', ogUrl);
-        }
-      } catch (e) {
-        console.log('Step 1.5: og:image check failed:', e);
-        // ignore errors, just skip og:image if can't fetch
-      }
     }
 
     /* ---------- STEP 2 – GPT-4.1 link filter ---------- */
@@ -91,10 +73,6 @@ export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
     /* ---------- STEP 4 – harvest & dedupe images ---------- */
     console.log('Step 4: Parsing and deduplicating images');
     let imgs = parseImages(homepage.rawHTML ?? '', url);
-    // If og:image is valid and not already in imgs, add it
-    if (ogImage && !imgs.some(img => img.url === ogImage!.url)) {
-      imgs.unshift({ url: ogImage.url, landingPage: url, alt: 'Open Graph image', context: undefined });
-    }
     pages.forEach((p) => (imgs = imgs.concat(parseImages(p.rawHTML, p.link))));
     // For testing: limit to 5 unique images (was 50 in production)
     const uniqueImgs = await dedupeImages(imgs.slice(0, 100)); // ≤ 5 items after dedupe

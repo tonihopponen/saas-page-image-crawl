@@ -11,7 +11,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
   try {
     /* ---------- validation ---------- */
     if (!event.body) throw new Error('body missing');
-    const { url } = JSON.parse(event.body);
+    const { url, force_refresh = false } = JSON.parse(event.body);
     if (!url) throw new Error('url missing');
     const u = new URL(url);
     if (!/^https?:$/.test(u.protocol)) throw new Error('url must start with http/https');
@@ -28,8 +28,9 @@ export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
     console.log('Step 1: Starting Firecrawl scrape for', url);
     const key = `${sha256(url)}/homepage.json`;
     let homepage = await getObject<any>(key);
-    if (!homepage) {
-      console.log('Step 1: No cached data, scraping fresh');
+    
+    if (!homepage || force_refresh) {
+      console.log('Step 1: No cached data or force refresh, scraping fresh');
       homepage = await firecrawlScrape(url, {
         onlyMainContent: false,
         formats: ['links', 'rawHtml'],

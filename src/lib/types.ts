@@ -1,6 +1,8 @@
 export interface FirecrawlOptions {
   onlyMainContent: boolean;
   formats: ('rawHtml' | 'links' | 'metadata')[];
+  maxAge?: number;
+  storeInCache?: boolean;
 }
 
 export interface FirecrawlResponse {

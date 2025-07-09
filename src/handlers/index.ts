@@ -32,6 +32,8 @@ export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
       homepage = await firecrawlScrape(url, {
         onlyMainContent: false,
         formats: ['links', 'rawHtml'],
+        maxAge: 0,            // ⇦ disable read-cache
+        storeInCache: false,  // ⇦ don't write either
       });
       // Store with 24h TTL (86400 seconds)
       await putObject(key, homepage, 86400);
@@ -64,6 +66,8 @@ export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
         const page = await firecrawlScrape(link, {
           onlyMainContent: true,
           formats: ['rawHtml'],
+          maxAge: 0,
+          storeInCache: false,
         });
         return { link, rawHTML: page.rawHTML ?? '' };
       })

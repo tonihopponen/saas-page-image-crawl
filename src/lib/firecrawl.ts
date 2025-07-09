@@ -25,7 +25,7 @@ export async function firecrawlScrape(
       { url, options },
       { 
         headers: { 
-          'x-api-key': apiKey,
+          'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
           'User-Agent': 'saas-image-crawl/1.0.0'
         },

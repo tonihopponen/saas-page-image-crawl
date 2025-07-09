@@ -7,7 +7,7 @@ import { parseImages } from '../lib/html-images';
 import { dedupeImages } from '../lib/image-hash';
 import probe from 'probe-image-size';
 
-export const handler: APIGatewayProxyHandlerV2 = async (event) => {
+export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
   try {
     /* ---------- validation ---------- */
     if (!event.body) throw new Error('body missing');

@@ -8,8 +8,10 @@ type HashResult = { img: RawImage; hash: string };
 function computePHash(url: string): Promise<string> {
   return new Promise((res, rej) => {
     imageHash
-      .imageHash(url, 16, true, res as any)   // `true` => use phash
-      .catch(rej);
+      .imageHash(url, 16, true, (err: any, hash: string) => {
+        if (err) rej(err);
+        else res(hash);
+      });
   });
 }
 

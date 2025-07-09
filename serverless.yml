@@ -10,6 +10,16 @@ provider:
     S3_BUCKET: ${self:service}-data
     FIRECRAWL_API_KEY: ${env:FIRECRAWL_API_KEY}
     OPENAI_API_KEY: ${env:OPENAI_API_KEY}
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - s3:GetObject
+        - s3:PutObject
+        - s3:DeleteObject
+        - s3:ListBucket
+      Resource:
+        - arn:aws:s3:::${self:service}-data/*
+        - arn:aws:s3:::${self:service}-data
 
 functions:
   extractor:

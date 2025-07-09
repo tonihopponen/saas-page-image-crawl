@@ -13,7 +13,7 @@ provider:
 
 functions:
   extractor:
-    handler: dist/handlers/index.handler
+    handler: src/handlers/index.handler
     events:
       - http:
           path: extract

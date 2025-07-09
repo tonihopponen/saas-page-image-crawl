@@ -71,7 +71,8 @@ export async function firecrawlScrape(
       console.log('Firecrawl: No rawHTML field in response');
     }
     
-    return (data as any).data ?? data;   // unwrap v1 response
+    const inner = (data as any).data ?? data;      // data wrapper
+    return Array.isArray(inner) ? inner[0] : inner; // 🆕 take first element
   } catch (error: any) {
     console.error('Firecrawl: Error details:');
     console.error('  Status:', error.response?.status);

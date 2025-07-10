@@ -113,17 +113,25 @@ export async function analyseImages(
     ];
 
     /* ---------- call OpenAI ---------- */
-    console.info('analyseImages: prompt →', messages[0].content.slice(0, 500) + '…');
+    console.info('analyseImages: prompt →', (messages[0].content || '').slice(0, 500) + '…');
 
-    const resp: any = await openai.chat.completions.create({
+    const resp = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       temperature: 0.2,
       messages,
       max_tokens: 10000,
       response_format: { type: 'json_object' },
-    })!;
+    });
 
-    const raw = (resp as any)?.choices?.[0]?.message?.content ?? '{}';
+    let raw = '{}';
+    try {
+      const response = resp as any;
+      if (response?.choices?.[0]?.message?.content) {
+        raw = response.choices[0].message.content;
+      }
+    } catch (error) {
+      console.error('analyseImages: error accessing response content', error);
+    }
     console.info('analyseImages: raw reply →', raw);
 
     try {

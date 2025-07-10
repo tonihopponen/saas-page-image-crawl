@@ -89,123 +89,76 @@ export async function analyseImages(
   const out: MiniResult[] = [];
 
   for (const batch of batches) {
-    /* ---------- 1. Build prompt ---------- */
+    /* ---------- build single USER prompt ---------- */
+    const payload = batch.map((b) => ({
+      image_url: b.url,
+      context: b.alt || b.context || '',
+    }));
+
     const messages: OpenAI.ChatCompletionMessageParam[] = [
       {
-        role: 'system',
-        content: `You are a SaaS marketing expert specialising in website and product images.
-
-Your task is to analyse each image and return a detailed, marketing-ready description.
-
-Input: For each image you will receive:
-• image_url
-• context (optional surrounding or alt text)
-
-Return a JSON object with a top-level key "images" whose value is an array.
-Each array item must contain:
-  • "image_url": the exact image URL you were given
-  • "alt": detailed, marketing-ready alt text
-  • "type": "ui_screenshot" or "lifestyle"
-  • "confidence": 0-1 indicating suitability for a product landing page
-
-Use the exact link you received; do **not** write "#1 context" or similar placeholders.
-
-### Example response
-{
-  "images": [
-    {
-      "image_url": "https://example.com/dashboard.png",
-      "alt": "Dashboard showing sales analytics & conversion funnel",
-      "type": "ui_screenshot",
-      "confidence": 0.92
-    }
-  ]
-}
-
-Respond with JSON only — no commentary.`,
+        role: 'user',
+        content:
+          `You are a SaaS marketing expert specialising in website and product images.\n\n` +
+          `Analyse each image in the JSON array below and return a JSON object with key "images".\n` +
+          `For every item output:\n` +
+          `  • "image_url": same URL you received (do not invent)\n` +
+          `  • "alt": detailed, marketing-ready alt text\n` +
+          `  • "type": "ui_screenshot" | "lifestyle"\n` +
+          `  • "confidence": 0-1 suitability for a product landing page\n\n` +
+          `Respond with JSON only — no markdown.\n\n` +
+          `### INPUT\n` +
+          JSON.stringify(payload, null, 2),
       },
     ];
 
-    /* ---------- 2. Attach every image as one multimodal block ---------- */
-    batch.forEach((img) =>
-      messages.push({
-        role: 'user',
-        content: [
-          {
-            type: 'image_url',
-            image_url: { url: img.url },
-          },
-          {
-            type: 'text',
-            text: img.alt ?? img.context ?? '',
-          },
-        ],
-      })
-    );
+    /* ---------- call OpenAI ---------- */
+    console.info('analyseImages: prompt →', messages[0].content.slice(0, 500) + '…');
 
-    /* ---------- 3. Call OpenAI ---------- */
-
-    /* 🐞 NEW: log the first two messages we're about to send */
-    console.info('analyseImages: SYSTEM prompt →', messages[0].content);
-    console.info('analyseImages: first USER block →', JSON.stringify(messages[1], null, 2));
-
-    console.info('analyseImages: sending batch', batch.map((b) => b.url));
-
-    const resp = await openai.chat.completions.create({
+    const resp: any = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
-      temperature: 0.3,
+      temperature: 0.2,
       messages,
-      max_tokens: 600,
+      max_tokens: 10000,
       response_format: { type: 'json_object' },
-    });
+    })!;
 
-    const raw = resp.choices[0].message.content ?? '{}';
+    const raw = (resp as any)?.choices?.[0]?.message?.content ?? '{}';
+    console.info('analyseImages: raw reply →', raw);
 
-    /* log full reply in 1-KB chunks */
-    for (let i = 0; i < raw.length; i += 1024) {
-      console.info(
-        `analyseImages: raw model reply [${i}-${Math.min(i + 1024, raw.length)}]`,
-        raw.slice(i, i + 1024)
-      );
-    }
-
-    /* ---------- 4. Parse & normalise ---------- */
     try {
       const json = JSON.parse(raw);
-      const arr: any[] = json.images ?? json.items ?? [];
+      const arr: { image_url?: string; alt?: string; type?: string; confidence?: number }[] = (json.images ?? []) as any[];
+      const batchTyped: MiniRequest[] = batch;
 
-      if (arr.length === batch.length) {
-        arr.forEach((it, idx) => {
+      /* inject real URL if missing */
+      if (arr.length === batchTyped.length) {
+        arr.forEach((it, i) => {
           if (
+            !it ||
             !it.image_url ||
             typeof it.image_url !== 'string' ||
-            it.image_url.startsWith('#')
+            (typeof it.image_url === 'string' && it.image_url.startsWith('http') === false)
           ) {
-            it.image_url = batch[idx].url;
+            it.image_url = batchTyped[i]?.url ?? '';
           }
         });
       }
 
       out.push(
         ...arr.map((it) => ({
-          url: it.image_url,
+          url: it.image_url ?? '',
           alt: it.alt ?? '',
-          type: it.type ?? 'ui_screenshot',
+          type: (it.type === 'lifestyle' ? 'lifestyle' : 'ui_screenshot') as 'ui_screenshot' | 'lifestyle',
           confidence: it.confidence ?? 0,
         }))
       );
     } catch (err) {
       console.error('analyseImages: JSON parse error', err);
-      batch.forEach((b) =>
-        out.push({
-          url: b.url,
-          alt: '',
-          type: 'ui_screenshot',
-          confidence: 0,
-        })
-      );
     }
   }
-
   return out;
 }
+
+// fallback to satisfy linter
+export default {};

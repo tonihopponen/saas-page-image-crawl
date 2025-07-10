@@ -11,6 +11,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
   try {
     /* ---------- validation ---------- */
     if (!event.body) throw new Error('body missing');
+    console.log('Debug: Raw event.body:', event.body);
     const { url, force_refresh = false } = JSON.parse(event.body);
     if (!url) throw new Error('url missing');
     const u = new URL(url);
@@ -99,13 +100,25 @@ export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
     const limitedImgs = uniqueImgs.slice(0, 5); // hard cap for test
     console.log('Step 4: Found', limitedImgs.length, 'unique images');
 
-    /* ---------- STEP 5 – GPT-o4-mini image analysis ---------- */
-    console.log('Step 5: Analyzing images with AI');
-    const aiData = await analyseImages(limitedImgs);
-    console.log('Step 5: AI analysis complete');
+    /* ---------- STEP 5 – GPT-o4-mini analysis (PNG / JPEG / WEBP only) ---------- */
 
-    const imagesFinal = limitedImgs.map((raw) => {
-      const ai = aiData.find((a) => a.url === raw.url);
+    // ❶ keep only the formats we want to spend tokens on
+    const sendToAI = uniqueImgs.filter((img) =>
+      /\.(png|jpe?g|webp)(\?|$)/i.test(img.url)
+    );
+
+    let analysed: Awaited<ReturnType<typeof analyseImages>> = [];
+
+    if (sendToAI.length) {
+      console.info('Step 5: sending', sendToAI.length, 'images to AI');
+      analysed = await analyseImages(sendToAI);
+    } else {
+      console.warn('Step 5: no png/jpeg/webp images – skipping AI step');
+    }
+
+    /* ---------- shape final output ---------- */
+    const imagesFinal = uniqueImgs.map((raw) => {
+      const ai = analysed.find((a) => a.url === raw.url);
       return {
         url: raw.url,
         alt: ai?.alt ?? raw.alt ?? '',

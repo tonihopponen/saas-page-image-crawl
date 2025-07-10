@@ -61,11 +61,11 @@ export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
       console.warn('Step 2: GPT output was not an array:', gptRaw);               // 🐞
     }
 
-    // Slice to top-4 and log
-    const keptLinks = (Array.isArray(gptRaw) ? gptRaw : []).slice(0, 4);
+    // Slice to top-1 and log
+    const keptLinks = (Array.isArray(gptRaw) ? gptRaw : []).slice(0, 1);
     console.info('Step 2: Kept links:', keptLinks);                               // 🐞
 
-    /* ---------- STEP 3 – Firecrawl top-4 pages ---------- */
+    /* ---------- STEP 3 – Firecrawl top-1 page ---------- */
     console.log('Step 3: Scraping top pages');
     const pages = await Promise.all(
       keptLinks.map(async (link) => {

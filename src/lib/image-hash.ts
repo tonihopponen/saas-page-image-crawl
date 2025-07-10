@@ -115,9 +115,8 @@ export async function filterImages(
           continue; // Skip if both dimensions are under 300px
         }
       } catch (err) {
-        console.info(`filterImages: filtered out ${img.url} - dimension check failed: ${err}`);
-        // If dimension check fails, skip the image
-        continue;
+        console.info(`filterImages: dimension check failed for ${img.url} - keeping image: ${err}`);
+        // Do not continue; keep the image if dimension check fails
       }
     } else {
       console.info(`filterImages: ${img.url} has Content-Length, skipping dimension check`);

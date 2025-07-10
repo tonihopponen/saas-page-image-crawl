@@ -6,6 +6,6 @@ declare module 'probe-image-size' {
     mime: string;
   }
   
-  function probe(url: string): Promise<ProbeResult>;
+  function probe(input: string | Buffer): Promise<ProbeResult>;
   export = probe;
 } 

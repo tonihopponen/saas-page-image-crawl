@@ -5,7 +5,7 @@ import { firecrawlScrape } from '../lib/firecrawl';
 import { filterHomepageLinks, analyseImages } from '../lib/openai';  // ← added analyseImages
 import { gptExtractImages } from '../lib/gpt-image-extract';
 import { parseImages } from '../lib/html-images';
-import { dedupeImages } from '../lib/image-hash';
+import { dedupeImages, filterImages } from '../lib/image-hash';
 
 export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
   try {
@@ -95,17 +95,23 @@ export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
       console.info('Step 4b: GPT returned', gptUrls.length, 'URLs');
     }
 
-    const uniqueImgs = await dedupeImages(imgs);   // HEAD + pHash
+    const uniqueImgs = await dedupeImages(imgs);   // HEAD + pHash + Content-Length filter
     console.info('Step 4c: unique images after dedupe:', uniqueImgs.length);
     console.info('Step 4c: unique image URLs:', uniqueImgs.map(img => img.url));
-    const limitedImgs = uniqueImgs.slice(0, 5); // hard cap for test
+    
+    // Additional filtering: remove icons/logos and check dimensions for images without Content-Length
+    const filteredImgs = await filterImages(uniqueImgs);
+    console.info('Step 4d: images after additional filtering:', filteredImgs.length);
+    console.info('Step 4d: filtered image URLs:', filteredImgs.map(img => img.url));
+    
+    const limitedImgs = filteredImgs.slice(0, 5); // hard cap for test
     console.info('Step 4: limited image URLs:', limitedImgs.map(img => img.url));
     console.log('Step 4: Found', limitedImgs.length, 'unique images');
 
     /* ---------- STEP 5 – GPT-o4-mini analysis (jpeg/png/webp) ---------- */
 
     // 1 · filter to the formats we care about
-    const eligible = uniqueImgs.filter((img) =>
+    const eligible = filteredImgs.filter((img) =>
       /\.(jpe?g|png|webp)(\?|$)/i.test(img.url)
     );
 
@@ -133,7 +139,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
         .map((a) => [canon(a.url), a])
     );
 
-    const imagesFinal = uniqueImgs.map((raw) => {
+    const imagesFinal = filteredImgs.map((raw) => {
       const ai = aiByUrl.get(canon(raw.url));
       return {
         url: raw.url,

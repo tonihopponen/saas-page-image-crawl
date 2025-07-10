@@ -97,6 +97,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
 
     const uniqueImgs = await dedupeImages(imgs);   // HEAD + pHash
     console.info('Step 4c: unique images after dedupe:', uniqueImgs.length);
+    console.info('Step 4c: unique image URLs:', uniqueImgs.map(img => img.url));
     const limitedImgs = uniqueImgs.slice(0, 5); // hard cap for test
     console.log('Step 4: Found', limitedImgs.length, 'unique images');
 

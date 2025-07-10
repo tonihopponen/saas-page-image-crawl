@@ -100,23 +100,27 @@ export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
     const limitedImgs = uniqueImgs.slice(0, 5); // hard cap for test
     console.log('Step 4: Found', limitedImgs.length, 'unique images');
 
-    /* ---------- STEP 5 – GPT-o4-mini analysis (PNG / JPEG / WEBP only) ---------- */
+    /* ---------- STEP 5 – GPT-o4-mini analysis (jpeg/png/webp) ---------- */
 
-    // ❶ keep only the formats we want to spend tokens on
-    const sendToAI = uniqueImgs.filter((img) =>
-      /\.(png|jpe?g|webp)(\?|$)/i.test(img.url)
+    // 1 · filter to the formats we care about
+    const eligible = uniqueImgs.filter((img) =>
+      /\.(jpe?g|png|webp)(\?|$)/i.test(img.url)
     );
 
     let analysed: Awaited<ReturnType<typeof analyseImages>> = [];
 
-    if (sendToAI.length) {
-      console.info('Step 5: sending', sendToAI.length, 'images to AI');
+    if (eligible.length) {
+      // 2 · send at most five images for enrichment
+      const sendToAI = eligible.slice(0, 5);
+      console.info(
+        `Step 5: sending ${sendToAI.length} of ${eligible.length} eligible images to AI`
+      );
       analysed = await analyseImages(sendToAI);
     } else {
-      console.warn('Step 5: no png/jpeg/webp images – skipping AI step');
+      console.warn('Step 5: no jpeg/png/webp images – skipping AI step');
     }
 
-    /* ---------- shape final output ---------- */
+    // 3 · merge AI data (if any) back into every unique image
     const imagesFinal = uniqueImgs.map((raw) => {
       const ai = analysed.find((a) => a.url === raw.url);
       return {

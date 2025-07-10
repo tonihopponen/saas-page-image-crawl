@@ -144,6 +144,11 @@ Respond with JSON only — no commentary.`,
     );
 
     /* ---------- 3. Call OpenAI ---------- */
+
+    /* 🐞 NEW: log the first two messages we're about to send */
+    console.info('analyseImages: SYSTEM prompt →', messages[0].content);
+    console.info('analyseImages: first USER block →', JSON.stringify(messages[1], null, 2));
+
     console.info('analyseImages: sending batch', batch.map((b) => b.url));
 
     const resp = await openai.chat.completions.create({

@@ -5,7 +5,7 @@ import { firecrawlScrape } from '../lib/firecrawl';
 import { filterHomepageLinks, analyseImages } from '../lib/openai';  // ← added analyseImages
 import { gptExtractImages } from '../lib/gpt-image-extract';
 import { parseImages } from '../lib/html-images';
-import { dedupeImages, filterImages } from '../lib/image-hash';
+import { dedupeImages, filterImages, hasValidFormat } from '../lib/image-hash';
 
 export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
   try {
@@ -110,16 +110,23 @@ export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
 
     /* ---------- STEP 5 – GPT-o4-mini analysis (jpeg/png/webp) ---------- */
 
-    // 1 · filter to the formats we care about
-    const eligible = filteredImgs.filter((img) =>
-      /\.(jpe?g|png|webp)(\?|$)/i.test(img.url)
-    );
+    // 1 · filter to the formats we care about and check query string formats
+    const eligible = filteredImgs.filter((img) => {
+      // Check file extension
+      const hasValidExtension = /\.(jpe?g|png|webp)(\?|$)/i.test(img.url);
+      
+      // Check query string format parameters
+      const hasValidQueryFormat = hasValidFormat(img.url);
+      
+      return hasValidExtension || hasValidQueryFormat;
+    });
 
     let analysed: Awaited<ReturnType<typeof analyseImages>> = [];
 
     if (eligible.length) {
       // 2 · send at most five images for enrichment
       const sendToAI = eligible.slice(0, 5);
+      console.info('Step 5: eligible images after format check:', eligible.length);
       console.info('Step 5: sending image URLs:', sendToAI.map(img => img.url));
       console.info(
         `Step 5: sending ${sendToAI.length} of ${eligible.length} eligible images to AI`

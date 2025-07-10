@@ -111,3 +111,63 @@ export async function filterImages(
 
   return filtered;
 }
+
+/**
+ * Check if image URL has valid format parameters in query string
+ * Allowed formats: webp, jpeg, png
+ * Format parameters: format=, fm=, f=, tr=f-, auto=format, imformat=, imgeng=/f_
+ */
+export function hasValidFormat(url: string): boolean {
+  try {
+    const urlObj = new URL(url);
+    const searchParams = urlObj.searchParams;
+    
+    // Check for format parameters
+    const formatParams = ['format', 'fm', 'f'];
+    const transformParams = ['tr', 'auto', 'imformat'];
+    const imgengParam = 'imgeng';
+    
+    // Check direct format parameters
+    for (const param of formatParams) {
+      const value = searchParams.get(param);
+      if (value && ['webp', 'jpeg', 'png'].includes(value.toLowerCase())) {
+        return true;
+      }
+    }
+    
+    // Check transform parameters
+    for (const param of transformParams) {
+      const value = searchParams.get(param);
+      if (value && value.toLowerCase().includes('format')) {
+        // Extract format from transform value
+        const formatMatch = value.match(/(webp|jpeg|png)/i);
+        if (formatMatch) {
+          return true;
+        }
+      }
+    }
+    
+    // Check tr=f- format (e.g., tr=f-webp)
+    const trValue = searchParams.get('tr');
+    if (trValue && trValue.startsWith('f-')) {
+      const format = trValue.substring(2).toLowerCase();
+      if (['webp', 'jpeg', 'png'].includes(format)) {
+        return true;
+      }
+    }
+    
+    // Check imgeng parameter (e.g., imgeng=/f_webp)
+    const imgengValue = searchParams.get(imgengParam);
+    if (imgengValue && imgengValue.includes('/f_')) {
+      const formatMatch = imgengValue.match(/\/f_(webp|jpeg|png)/i);
+      if (formatMatch) {
+        return true;
+      }
+    }
+    
+    return false;
+  } catch {
+    // If URL parsing fails, assume no valid format
+    return false;
+  }
+}

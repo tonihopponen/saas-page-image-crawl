@@ -99,7 +99,15 @@ export async function filterImages(
           timeout: 10_000,
         });
 
-        const info = await probe(Buffer.from(new Uint8Array(res.data)));
+        let info;
+        if (img.url.toLowerCase().endsWith('.svg')) {
+          // SVG: decode buffer to string
+          const svgString = Buffer.from(res.data).toString('utf-8');
+          info = await probe(svgString);
+        } else {
+          // Other formats: convert ArrayBuffer to Buffer using Uint8Array
+          info = await probe(Buffer.from(new Uint8Array(res.data)));
+        }
         console.info(`filterImages: ${img.url} dimensions: ${info?.width}x${info?.height}`);
         
         if (!info || (info.width < 300 && info.height < 300)) {

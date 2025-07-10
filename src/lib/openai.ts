@@ -89,7 +89,7 @@ export async function analyseImages(
   const out: MiniResult[] = [];
 
   for (const batch of batches) {
-    /* Build the multi-modal messages */
+    /* Build messages … (unchanged) */
     const messages: OpenAI.ChatCompletionMessageParam[] = [
       {
         role: 'system',
@@ -106,7 +106,6 @@ Return a JSON array (same order) with:
 
 Respond with JSON only—no commentary.`,
       },
-      /* Images as separate content parts */
       ...batch.map<OpenAI.ChatCompletionMessageParam>((img) => ({
         role: 'user',
         content: [
@@ -116,7 +115,6 @@ Respond with JSON only—no commentary.`,
           },
         ],
       })),
-      /* Context block */
       {
         role: 'user',
         content: batch
@@ -128,28 +126,28 @@ Respond with JSON only—no commentary.`,
       },
     ];
 
-    // 🐞 LOG which URLs we’re sending
+    // 🐞 log which URLs we’re sending
     console.info('analyseImages: sending batch', batch.map((b) => b.url));
 
-    /* Call the mini vision model */
     const resp = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',     // vision-capable lightweight model
+      model: 'gpt-4o-mini',
       temperature: 0.3,
       messages,
       max_tokens: 400,
-      response_format: { type: 'json_object' },           // force valid JSON
+      response_format: { type: 'json_object' }, // force valid JSON
     });
 
-    // 🐞 LOG raw response text (first 300 chars)
-    console.info(
-      'analyseImages: raw model reply',
-      resp.choices[0].message.content?.slice(0, 300) + '…'
-    );
+    const raw = resp.choices[0].message.content ?? '{}';
+
+    // 🐞 log first 300 chars of model reply
+    console.info('analyseImages: raw model reply', raw.slice(0, 300) + '…');
 
     try {
-      // model returns {"items":[ … ]}
-      const json = JSON.parse(resp.choices[0].message.content ?? '{}');
-      out.push(...(json.items ?? []));
+      const json = JSON.parse(raw);
+
+      /* Accept either {items:[…]} or {images:[…]} */
+      const arr = json.items ?? json.images ?? [];
+      out.push(...arr);
     } catch (err) {
       console.error('analyseImages: JSON parse error', err);
       batch.forEach((b) =>

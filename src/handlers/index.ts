@@ -120,15 +120,14 @@ export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
       console.warn('Step 5: no jpeg/png/webp images – skipping AI step');
     }
 
-    // 3 · merge AI data (if any) back into every unique image
-    // build a hash → AI result map for fast lookup
-    const aiByHash = new Map(
-      analysed.map((a) => [a.url.split('?')[0], a])   // canonical key w/o query
-    );
+    /* canonicalise → drop query-string + lowercase extension */
+    const canon = (u: string) => u.split('?')[0];
+
+    /* build lookup by canonical URL */
+    const aiByUrl = new Map(analysed.map((a) => [canon(a.url), a]));
 
     const imagesFinal = uniqueImgs.map((raw) => {
-      const key = raw.url.split('?')[0];             // same canonicalization
-      const ai = aiByHash.get(key);
+      const ai = aiByUrl.get(canon(raw.url));
       return {
         url: raw.url,
         alt: ai?.alt ?? raw.alt ?? '',

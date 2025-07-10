@@ -96,15 +96,38 @@ export async function analyseImages(
         content: `You are a SaaS conversion-rate expert.
 
 For each image you will receive:
-- the image itself
-- optional surrounding or alt text
+• the image itself  
+• optional surrounding or alt text
 
-Return a JSON array (same order) with:
-  - "alt": a very detailed, marketing-ready alt text
-  - "type": "ui_screenshot" or "lifestyle"
-  - "confidence": number 0-1 indicating suitability for a product landing page
+👉 **Return a JSON object with a top-level key "images".  
+   That key must hold an array of objects, one per image.**
 
-Respond with JSON only—no commentary.`,
+Each array item **must include exactly these fields**:
+  • "url"         – the exact image URL you were given  
+  • "alt"         – concise, marketing-ready alt text (≤ 25 words)  
+  • "type"        – either "ui_screenshot" or "lifestyle"  
+  • "confidence"  – number 0-1 indicating suitability for a product landing page
+
+### Example response
+
+{
+  "images": [
+    {
+      "url": "https://example.com/dashboard.png",
+      "alt": "Dashboard showing sales analytics & conversion funnel",
+      "type": "ui_screenshot",
+      "confidence": 0.92
+    },
+    {
+      "url": "https://example.com/team-collaboration.webp",
+      "alt": "Team collaborating on laptops in a modern office",
+      "type": "lifestyle",
+      "confidence": 0.77
+    }
+  ]
+}
+
+**Respond with JSON only — no extra text, no markdown fences.**`,
       },
       ...batch.map<OpenAI.ChatCompletionMessageParam>((img) => ({
         role: 'user',

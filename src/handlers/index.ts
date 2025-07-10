@@ -121,10 +121,14 @@ export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
     }
 
     /* canonicalise → drop query-string + lowercase extension */
-    const canon = (u: string) => u.split('?')[0];
+    const canon = (u?: string) => (u ? u.split('?')[0] : '');
 
     /* build lookup by canonical URL */
-    const aiByUrl = new Map(analysed.map((a) => [canon(a.url), a]));
+    const aiByUrl = new Map(
+      analysed
+        .filter((a) => a.url)              // ⬅ skip entries without url
+        .map((a) => [canon(a.url), a])
+    );
 
     const imagesFinal = uniqueImgs.map((raw) => {
       const ai = aiByUrl.get(canon(raw.url));

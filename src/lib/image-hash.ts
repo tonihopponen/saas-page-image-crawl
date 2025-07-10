@@ -81,14 +81,18 @@ export async function filterImages(
   const filtered: (RawImage & { hash: string })[] = [];
 
   for (const img of imgs) {
+    console.info(`filterImages: checking ${img.url}`);
+    
     // Remove images with icon/logo in filename
     const filename = img.url.toLowerCase();
     if (filename.includes('icon') || filename.includes('logo')) {
+      console.info(`filterImages: filtered out ${img.url} - contains icon/logo in filename`);
       continue;
     }
 
     // For images without Content-Length, check dimensions
     if (!img.hasContentLength) {
+      console.info(`filterImages: ${img.url} has no Content-Length, checking dimensions`);
       try {
         const res = await axios.get<ArrayBuffer>(img.url, {
           responseType: 'arraybuffer',
@@ -96,16 +100,23 @@ export async function filterImages(
         });
 
         const info = await probe(Buffer.from(new Uint8Array(res.data)));
+        console.info(`filterImages: ${img.url} dimensions: ${info?.width}x${info?.height}`);
+        
         if (!info || (info.width < 300 && info.height < 300)) {
+          console.info(`filterImages: filtered out ${img.url} - dimensions too small (${info?.width}x${info?.height})`);
           continue; // Skip if both dimensions are under 300px
         }
       } catch (err) {
+        console.info(`filterImages: filtered out ${img.url} - dimension check failed: ${err}`);
         // If dimension check fails, skip the image
         continue;
       }
+    } else {
+      console.info(`filterImages: ${img.url} has Content-Length, skipping dimension check`);
     }
 
     // Keep the image (has Content-Length or passed dimension check)
+    console.info(`filterImages: keeping ${img.url}`);
     filtered.push({ url: img.url, landingPage: img.landingPage, alt: img.alt, context: img.context, hash: img.hash });
   }
 

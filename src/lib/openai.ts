@@ -139,8 +139,14 @@ Respond with JSON only—no commentary.`,
 
     const raw = resp.choices[0].message.content ?? '{}';
 
-    // 🐞 log first 300 chars of model reply
-    console.info('analyseImages: raw model reply', raw.slice(0, 300) + '…');
+    // 🐞 log full reply in 1 KB slices to avoid 256 KB CloudWatch limit
+    const CHUNK = 1024;                           // 1 KB per line
+    for (let i = 0; i < raw.length; i += CHUNK) {
+      console.info(
+        `analyseImages: raw model reply [${i}-${Math.min(i + CHUNK, raw.length)}]`,
+        raw.slice(i, i + CHUNK)
+      );
+    }
 
     try {
       const json = JSON.parse(raw);

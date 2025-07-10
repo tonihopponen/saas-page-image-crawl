@@ -98,22 +98,38 @@ export async function analyseImages(
     const messages: OpenAI.ChatCompletionMessageParam[] = [
       {
         role: 'user',
-        content:
-          `You are a SaaS marketing expert specialising in website and product images.\n\n` +
-          `Analyse each image in the JSON array below and return a JSON object with key "images".\n` +
-          `For every item output:\n` +
-          `  • "image_url": same URL you received (do not invent)\n` +
-          `  • "alt": detailed, marketing-ready alt text\n` +
-          `  • "type": "ui_screenshot" | "lifestyle"\n` +
-          `  • "confidence": 0-1 suitability for a product landing page\n\n` +
-          `Respond with JSON only — no markdown.\n\n` +
-          `### INPUT\n` +
-          JSON.stringify(payload, null, 2),
+        content: `You are a SaaS marketing expert specialising in website and product images.
+
+Your task is to use vision to analyse the images and write a detailed, marketing-ready alt text.
+
+Input:
+- image_url
+- context related to each image
+
+Step-by-step task:
+1. Use vision to analyse each image thoroughly
+2. Read the context provided by the user
+3. For each image return in JSON format:
+  • "image_url": same URL you received 
+  • "alt": detailed, marketing-ready alt text
+  • "type": "ui_screenshot" | "lifestyle"
+  • "confidence": 0-1 suitability for a product landing page
+
+Respond with JSON only — no markdown.
+
+### INPUT
+${JSON.stringify(payload, null, 2)}`,
       },
     ];
 
     /* ---------- call OpenAI ---------- */
-    console.info('analyseImages: prompt →', (messages[0].content || '').slice(0, 500) + '…');
+    /* ----- log FULL user prompt in 1-KB slices ----- */
+    for (let i = 0; i < (messages[0].content || '').length; i += 1024) {
+      console.info(
+        `analyseImages: prompt [${i}-${Math.min(i + 1024, (messages[0].content || '').length)}]`,
+        (messages[0].content || '').slice(i, i + 1024)
+      );
+    }
 
     const resp = await openai.chat.completions.create({
       model: 'gpt-4o-mini',

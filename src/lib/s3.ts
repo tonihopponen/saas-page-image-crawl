@@ -39,6 +39,20 @@ export async function getObject<T = unknown>(key: string): Promise<T | undefined
   }
 }
 
+export async function putBinaryObject(key: string, buffer: Buffer, contentType: string, expiresInSeconds?: number) {
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Body: buffer,
+      ContentType: contentType,
+      ...(expiresInSeconds
+        ? { Expires: new Date(Date.now() + expiresInSeconds * 1000) }
+        : {}),
+    })
+  );
+}
+
 const streamToString = (stream: Readable): Promise<string> =>
   new Promise((res, rej) => {
     const chunks: any[] = [];

@@ -3,6 +3,9 @@ import imageHash from 'image-hash';
 import crypto from 'crypto';
 import { RawImage } from './html-images';
 import probe from 'probe-image-size';
+import { putObject, putBinaryObject } from './s3';
+import path from 'path';
+import sharp from 'sharp';
 
 /** Hamming distance between two hex strings */
 const ham = (a: string, b: string) =>
@@ -188,4 +191,42 @@ export function hasValidFormat(url: string): boolean {
     // If URL parsing fails, assume no valid format
     return false;
   }
+}
+
+/**
+ * Convert AVIF images to WebP, upload to S3, and update the image list with new S3 URLs.
+ */
+export async function convertAvifImagesToWebpAndUpload(
+  imgs: (RawImage & { hash: string })[],
+  bucket: string
+): Promise<(RawImage & { hash: string })[]> {
+  const out: (RawImage & { hash: string })[] = [];
+  for (const img of imgs) {
+    if (img.url.toLowerCase().endsWith('.avif')) {
+      try {
+        const res = await axios.get<ArrayBuffer>(img.url, {
+          responseType: 'arraybuffer',
+          timeout: 10_000,
+        });
+        const webpBuffer = await sharp(Buffer.from(res.data)).webp().toBuffer();
+        // Generate a new S3 key (replace .avif with .webp)
+        const urlObj = new URL(img.url);
+        const baseName = path.basename(urlObj.pathname, '.avif');
+        const s3Key = `converted/${baseName}-${img.hash}.webp`;
+        // Upload to S3
+        await putBinaryObject(s3Key, webpBuffer, 'image/webp', 86400);
+        // Construct the S3 URL (assuming public bucket or CloudFront)
+        const s3Url = `https://${bucket}.s3.amazonaws.com/${s3Key}`;
+        out.push({ ...img, url: s3Url });
+        continue;
+      } catch (err) {
+        console.info(`convertAvifImagesToWebpAndUpload: failed to convert/upload ${img.url}: ${err}`);
+        // If conversion/upload fails, keep the original AVIF image
+        out.push(img);
+        continue;
+      }
+    }
+    out.push(img);
+  }
+  return out;
 }

@@ -121,8 +121,14 @@ export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
     }
 
     // 3 · merge AI data (if any) back into every unique image
+    // build a hash → AI result map for fast lookup
+    const aiByHash = new Map(
+      analysed.map((a) => [a.url.split('?')[0], a])   // canonical key w/o query
+    );
+
     const imagesFinal = uniqueImgs.map((raw) => {
-      const ai = analysed.find((a) => a.url === raw.url);
+      const key = raw.url.split('?')[0];             // same canonicalization
+      const ai = aiByHash.get(key);
       return {
         url: raw.url,
         alt: ai?.alt ?? raw.alt ?? '',

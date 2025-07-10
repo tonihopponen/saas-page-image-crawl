@@ -128,25 +128,30 @@ Respond with JSON only—no commentary.`,
       },
     ];
 
+    // 🐞 LOG which URLs we’re sending
+    console.info('analyseImages: sending batch', batch.map((b) => b.url));
+
     /* Call the mini vision model */
     const resp = await openai.chat.completions.create({
       model: 'gpt-4o-mini',     // vision-capable lightweight model
       temperature: 0.3,
       messages,
-      max_tokens: 10000,
+      max_tokens: 400,
+      response_format: { type: 'json_object' },           // force valid JSON
     });
 
-    let raw = resp.choices[0].message.content ?? '[]';
-
-    // 🔄 strip ```json … ``` or ```…``` fences
-    raw = raw.replace(/```json|```/gi, '').trim();
+    // 🐞 LOG raw response text (first 300 chars)
+    console.info(
+      'analyseImages: raw model reply',
+      resp.choices[0].message.content?.slice(0, 300) + '…'
+    );
 
     try {
-      const json = JSON.parse(raw);
-      out.push(...json);
+      // model returns {"items":[ … ]}
+      const json = JSON.parse(resp.choices[0].message.content ?? '{}');
+      out.push(...(json.items ?? []));
     } catch (err) {
-      console.error('analyseImages: JSON parse error', err, raw.slice(0, 100));
-      // fallback stub so ordering stays intact
+      console.error('analyseImages: JSON parse error', err);
       batch.forEach((b) =>
         out.push({
           url: b.url,

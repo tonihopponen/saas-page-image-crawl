@@ -89,111 +89,112 @@ export async function analyseImages(
   const out: MiniResult[] = [];
 
   for (const batch of batches) {
-    /* Build messages … (unchanged) */
+    /* ---------- 1. Build prompt ---------- */
     const messages: OpenAI.ChatCompletionMessageParam[] = [
       {
         role: 'system',
-        content: `You are a SaaS conversion-rate expert.
+        content: `You are a SaaS marketing expert specialising in website and product images.
 
-For each image you will receive:
-• the image itself  
-• optional surrounding or alt text
+Your task is to analyse each image and return a detailed, marketing-ready description.
 
-👉 **Return a JSON object with a top-level key "images".  
-   That key must hold an array of objects, one per image.**
+Input: For each image you will receive:
+• image_url
+• context (optional surrounding or alt text)
 
-Each array item **must include exactly these fields**:
-  • "url"         – the exact image URL you were given  
-  • "alt"         – concise, marketing-ready alt text (≤ 25 words)  
-  • "type"        – either "ui_screenshot" or "lifestyle"  
-  • "confidence"  – number 0-1 indicating suitability for a product landing page
+Return a JSON object with a top-level key "images" whose value is an array.
+Each array item must contain:
+  • "image_url": the exact image URL you were given
+  • "alt": detailed, marketing-ready alt text
+  • "type": "ui_screenshot" or "lifestyle"
+  • "confidence": 0-1 indicating suitability for a product landing page
 
 Use the exact link you received; do **not** write "#1 context" or similar placeholders.
 
 ### Example response
-
 {
   "images": [
     {
-      "url": "https://example.com/dashboard.png",
+      "image_url": "https://example.com/dashboard.png",
       "alt": "Dashboard showing sales analytics & conversion funnel",
       "type": "ui_screenshot",
       "confidence": 0.92
-    },
-    {
-      "url": "https://example.com/team-collaboration.webp",
-      "alt": "Team collaborating on laptops in a modern office",
-      "type": "lifestyle",
-      "confidence": 0.77
     }
   ]
 }
 
-**Respond with JSON only — no extra text, no markdown fences.**`,
+Respond with JSON only — no commentary.`,
       },
-      ...batch.map<OpenAI.ChatCompletionMessageParam>((img) => ({
+    ];
+
+    /* ---------- 2. Attach every image as one multimodal block ---------- */
+    batch.forEach((img) =>
+      messages.push({
         role: 'user',
         content: [
           {
             type: 'image_url',
             image_url: { url: img.url },
           },
+          {
+            type: 'text',
+            text: img.alt ?? img.context ?? '',
+          },
         ],
-      })),
-      {
-        role: 'user',
-        content: batch
-          .map(
-            (img, i) =>
-              `#${i + 1} context:\n${img.alt ?? ''}\n${img.context ?? ''}`
-          )
-          .join('\n\n'),
-      },
-    ];
+      })
+    );
 
-    // 🐞 log which URLs we’re sending
+    /* ---------- 3. Call OpenAI ---------- */
     console.info('analyseImages: sending batch', batch.map((b) => b.url));
 
     const resp = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       temperature: 0.3,
       messages,
-      max_tokens: 400,
-      response_format: { type: 'json_object' }, // force valid JSON
+      max_tokens: 600,
+      response_format: { type: 'json_object' },
     });
 
     const raw = resp.choices[0].message.content ?? '{}';
 
-    // 🐞 log full reply in 1 KB slices to avoid 256 KB CloudWatch limit
-    const CHUNK = 1024;                           // 1 KB per line
-    for (let i = 0; i < raw.length; i += CHUNK) {
+    /* log full reply in 1-KB chunks */
+    for (let i = 0; i < raw.length; i += 1024) {
       console.info(
-        `analyseImages: raw model reply [${i}-${Math.min(i + CHUNK, raw.length)}]`,
-        raw.slice(i, i + CHUNK)
+        `analyseImages: raw model reply [${i}-${Math.min(i + 1024, raw.length)}]`,
+        raw.slice(i, i + 1024)
       );
     }
 
+    /* ---------- 4. Parse & normalise ---------- */
     try {
       const json = JSON.parse(raw);
+      const arr: any[] = json.images ?? json.items ?? [];
 
-      /* Accept either {items:[…]} or {images:[…]} */
-      const arr = json.items ?? json.images ?? [];
-      out.push(...arr);
-
-      // ── Inject real URL when it's missing or clearly wrong ──
       if (arr.length === batch.length) {
-        arr.forEach((it: any, idx: number) => {
-          if (!it.url || typeof it.url !== 'string' || it.url.startsWith('#')) {
-            it.url = batch[idx].url;
+        arr.forEach((it, idx) => {
+          if (
+            !it.image_url ||
+            typeof it.image_url !== 'string' ||
+            it.image_url.startsWith('#')
+          ) {
+            it.image_url = batch[idx].url;
           }
         });
       }
+
+      out.push(
+        ...arr.map((it) => ({
+          url: it.image_url,
+          alt: it.alt ?? '',
+          type: it.type ?? 'ui_screenshot',
+          confidence: it.confidence ?? 0,
+        }))
+      );
     } catch (err) {
       console.error('analyseImages: JSON parse error', err);
       batch.forEach((b) =>
         out.push({
           url: b.url,
-          alt: b.alt ?? '',
+          alt: '',
           type: 'ui_screenshot',
           confidence: 0,
         })

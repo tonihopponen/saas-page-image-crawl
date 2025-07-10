@@ -99,6 +99,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
     console.info('Step 4c: unique images after dedupe:', uniqueImgs.length);
     console.info('Step 4c: unique image URLs:', uniqueImgs.map(img => img.url));
     const limitedImgs = uniqueImgs.slice(0, 5); // hard cap for test
+    console.info('Step 4: limited image URLs:', limitedImgs.map(img => img.url));
     console.log('Step 4: Found', limitedImgs.length, 'unique images');
 
     /* ---------- STEP 5 – GPT-o4-mini analysis (jpeg/png/webp) ---------- */
@@ -113,6 +114,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
     if (eligible.length) {
       // 2 · send at most five images for enrichment
       const sendToAI = eligible.slice(0, 5);
+      console.info('Step 5: sending image URLs:', sendToAI.map(img => img.url));
       console.info(
         `Step 5: sending ${sendToAI.length} of ${eligible.length} eligible images to AI`
       );

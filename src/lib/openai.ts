@@ -108,6 +108,8 @@ Each array item **must include exactly these fields**:
   • "type"        – either "ui_screenshot" or "lifestyle"  
   • "confidence"  – number 0-1 indicating suitability for a product landing page
 
+Use the exact link you received; do **not** write "#1 context" or similar placeholders.
+
 ### Example response
 
 {
@@ -177,6 +179,15 @@ Each array item **must include exactly these fields**:
       /* Accept either {items:[…]} or {images:[…]} */
       const arr = json.items ?? json.images ?? [];
       out.push(...arr);
+
+      // ── Inject real URL when it's missing or clearly wrong ──
+      if (arr.length === batch.length) {
+        arr.forEach((it: any, idx: number) => {
+          if (!it.url || typeof it.url !== 'string' || it.url.startsWith('#')) {
+            it.url = batch[idx].url;
+          }
+        });
+      }
     } catch (err) {
       console.error('analyseImages: JSON parse error', err);
       batch.forEach((b) =>

@@ -281,17 +281,7 @@ export async function filterS3ImagesByDimension(
   const filtered: (RawImage & { hash: string })[] = [];
   for (const img of imgs) {
     try {
-      const res = await axios.get<ArrayBuffer>(img.url, {
-        responseType: 'arraybuffer',
-        timeout: 10_000,
-      });
-      let info;
-      if (img.url.toLowerCase().endsWith('.svg')) {
-        const svgString = Buffer.from(res.data).toString('utf-8');
-        info = await probe(svgString);
-      } else {
-        info = await probe(Buffer.from(new Uint8Array(res.data)));
-      }
+      const info = await probe(img.url);
       if (info && (info.width >= 300 || info.height >= 300)) {
         filtered.push(img);
         if (filtered.length >= 5) break;

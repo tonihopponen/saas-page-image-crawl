@@ -4,8 +4,8 @@ import { sha256, getObject, putObject } from '../lib/s3';
 import { firecrawlScrape } from '../lib/firecrawl';
 import { filterHomepageLinks, analyseImages } from '../lib/openai';  // ← added analyseImages
 import { gptExtractImages } from '../lib/gpt-image-extract';
-import { parseImages } from '../lib/html-images';
-import { dedupeImages, filterImages, hasValidFormat } from '../lib/image-hash';
+import { parseImages, RawImage } from '../lib/html-images';
+import { dedupeImages, filterImages, hasValidFormat, uploadAllImagesToS3, filterS3ImagesByDimension } from '../lib/image-hash';
 
 export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
   try {
@@ -98,22 +98,28 @@ export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
     const uniqueImgs = await dedupeImages(imgs);   // HEAD + pHash + Content-Length filter
     console.info('Step 4c: unique images after dedupe:', uniqueImgs.length);
     console.info('Step 4c: unique image URLs:', uniqueImgs.map(img => img.url));
-    
-    // Additional filtering: remove icons/logos and check dimensions for images without Content-Length
-    const filteredImgs = await filterImages(uniqueImgs);
-    console.info('Step 4d: images after additional filtering:', filteredImgs.length);
-    console.info('Step 4d: filtered image URLs:', filteredImgs.map(img => img.url));
-    
+
+    // Upload all images to S3 (AVIF to WebP, others as-is)
+    const bucket = process.env.S3_BUCKET!;
+    const s3Imgs = await uploadAllImagesToS3(uniqueImgs, bucket);
+    console.info('Step 4d: images after S3 upload:', s3Imgs.length);
+    console.info('Step 4d: S3 image URLs:', s3Imgs.map((img: RawImage & { hash: string }) => img.url));
+
+    // Filter S3 images by dimension (at least one dimension >= 300px), limit to 5
+    const filteredImgs = await filterS3ImagesByDimension(s3Imgs);
+    console.info('Step 4e: images after dimension filter:', filteredImgs.length);
+    console.info('Step 4e: filtered image URLs:', filteredImgs.map((img: RawImage & { hash: string }) => img.url));
+
     const limitedImgs = filteredImgs.slice(0, 5); // hard cap for test
-    console.info('Step 4: limited image URLs:', limitedImgs.map(img => img.url));
+    console.info('Step 4: limited image URLs:', limitedImgs.map((img: RawImage & { hash: string }) => img.url));
     console.log('Step 4: Found', limitedImgs.length, 'unique images');
 
     /* ---------- STEP 5 – GPT-o4-mini analysis (jpeg/png/webp) ---------- */
 
     // 1 · filter to the formats we care about and check query string formats
-    const eligible = filteredImgs.filter((img) => {
+    const eligible = limitedImgs.filter((img: RawImage & { hash: string }) => {
       // Check file extension
-      const hasValidExtension = /\.(jpe?g|png|webp)(\?|$)/i.test(img.url);
+      const hasValidExtension = /\.(jpe?g|png|webp|svg)(\?|$)/i.test(img.url);
       
       // Check query string format parameters
       const hasValidQueryFormat = hasValidFormat(img.url);
@@ -127,7 +133,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
       // 2 · send at most five images for enrichment
       const sendToAI = eligible.slice(0, 5);
       console.info('Step 5: eligible images after format check:', eligible.length);
-      console.info('Step 5: sending image URLs:', sendToAI.map(img => img.url));
+      console.info('Step 5: sending image URLs:', sendToAI.map((img: RawImage & { hash: string }) => img.url));
       console.info(
         `Step 5: sending ${sendToAI.length} of ${eligible.length} eligible images to AI`
       );
@@ -146,7 +152,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
         .map((a) => [canon(a.url), a])
     );
 
-    const imagesFinal = filteredImgs.map((raw) => {
+    const imagesFinal = limitedImgs.map((raw: RawImage & { hash: string }) => {
       const ai = aiByUrl.get(canon(raw.url));
       return {
         url: raw.url,

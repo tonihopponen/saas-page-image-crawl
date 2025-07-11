@@ -18,6 +18,7 @@ export async function putObject(key: string, data: unknown, expiresInSeconds?: n
       Key: key,
       Body: JSON.stringify(data),
       ContentType: 'application/json',
+      ACL: 'public-read',
       ...(expiresInSeconds
         ? { Expires: new Date(Date.now() + expiresInSeconds * 1000) }
         : {}),
@@ -46,6 +47,7 @@ export async function putBinaryObject(key: string, buffer: Buffer, contentType: 
       Key: key,
       Body: buffer,
       ContentType: contentType,
+      ACL: 'public-read',
       ...(expiresInSeconds
         ? { Expires: new Date(Date.now() + expiresInSeconds * 1000) }
         : {}),

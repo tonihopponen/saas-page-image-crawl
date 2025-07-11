@@ -211,7 +211,8 @@ export async function convertAvifImagesToWebpAndUpload(
         const webpBuffer = await sharp(Buffer.from(res.data)).webp().toBuffer();
         // Generate a new S3 key (replace .avif with .webp)
         const urlObj = new URL(img.url);
-        const baseName = path.basename(urlObj.pathname, '.avif');
+        const originalFilename = path.basename(urlObj.pathname); // This preserves %20
+        const baseName = originalFilename.replace('.avif', '');
         const s3Key = `all/${baseName}-${img.hash}.webp`;
         // Upload to S3
         await putBinaryObject(s3Key, webpBuffer, 'image/webp', 86400);

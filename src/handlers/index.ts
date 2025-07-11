@@ -156,8 +156,6 @@ export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
         url: raw.url,
         alt: ai?.alt ?? raw.alt ?? '',
         landing_page: raw.landingPage,
-        type: ai?.type ?? 'unknown',
-        confidence: ai?.confidence ?? 0,
         hash: raw.hash,
       };
     });

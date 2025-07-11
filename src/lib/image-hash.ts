@@ -244,20 +244,22 @@ export async function uploadAllImagesToS3(
   const out: (RawImage & { hash: string })[] = [];
   for (const img of imgs) {
     try {
-      const res = await axios.get<ArrayBuffer>(img.url, {
+      // Strip query string from URL for S3 key and download
+      const urlNoQuery = img.url.split('?')[0];
+      const res = await axios.get<ArrayBuffer>(urlNoQuery, {
         responseType: 'arraybuffer',
         timeout: 10_000,
       });
       let buffer: Buffer;
       let ext: string;
-      if (img.url.toLowerCase().endsWith('.avif')) {
+      if (urlNoQuery.toLowerCase().endsWith('.avif')) {
         buffer = await sharp(Buffer.from(res.data)).webp().toBuffer();
         ext = 'webp';
       } else {
         buffer = Buffer.from(new Uint8Array(res.data));
-        ext = img.url.split('.').pop()?.toLowerCase() || 'bin';
+        ext = urlNoQuery.split('.').pop()?.toLowerCase() || 'bin';
       }
-      const urlObj = new URL(img.url);
+      const urlObj = new URL(urlNoQuery);
       const baseName = path.basename(urlObj.pathname, path.extname(urlObj.pathname));
       const s3Key = `all/${baseName}-${img.hash}.${ext}`;
       await putBinaryObject(s3Key, buffer, `image/${ext}`, 86400);

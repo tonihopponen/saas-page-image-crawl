@@ -252,13 +252,67 @@ export async function uploadAllImagesToS3(
         timeout: 10_000,
       });
       let buffer: Buffer;
-      let ext: string;
+      let ext: string | undefined;
       if (urlNoQuery.toLowerCase().endsWith('.avif')) {
         buffer = await sharp(Buffer.from(res.data)).webp().toBuffer();
         ext = 'webp';
       } else {
         buffer = Buffer.from(new Uint8Array(res.data));
-        ext = urlNoQuery.split('.').pop()?.toLowerCase() || 'bin';
+        // Try to get extension from path
+        ext = urlNoQuery.split('.').pop();
+        if (ext && ext.includes('/')) ext = undefined; // not a real extension
+        if (!ext || ext === urlNoQuery) {
+          // No extension in path, try to get from query params
+          try {
+            const urlObj = new URL(img.url);
+            const searchParams = urlObj.searchParams;
+            // Check for format parameters
+            const formatParams = ['format', 'fm', 'f'];
+            for (const param of formatParams) {
+              const value = searchParams.get(param);
+              if (value && ['webp', 'jpeg', 'jpg', 'png', 'gif', 'bmp', 'tiff', 'svg', 'avif'].includes(value.toLowerCase())) {
+                ext = value.toLowerCase();
+                break;
+              }
+            }
+            // Check transform parameters
+            if (!ext) {
+              const transformParams = ['tr', 'auto', 'imformat'];
+              for (const param of transformParams) {
+                const value = searchParams.get(param);
+                if (value && value.toLowerCase().includes('format')) {
+                  const formatMatch = value.match(/(webp|jpeg|jpg|png|gif|bmp|tiff|svg|avif)/i);
+                  if (formatMatch) {
+                    ext = formatMatch[1].toLowerCase();
+                    break;
+                  }
+                }
+              }
+            }
+            // Check tr=f- format (e.g., tr=f-webp)
+            if (!ext) {
+              const trValue = searchParams.get('tr');
+              if (trValue && trValue.startsWith('f-')) {
+                const format = trValue.substring(2).toLowerCase();
+                if (['webp', 'jpeg', 'jpg', 'png', 'gif', 'bmp', 'tiff', 'svg', 'avif'].includes(format)) {
+                  ext = format;
+                }
+              }
+            }
+            // Check imgeng parameter (e.g., imgeng=/f_webp)
+            if (!ext) {
+              const imgengValue = searchParams.get('imgeng');
+              if (imgengValue && imgengValue.includes('/f_')) {
+                const formatMatch = imgengValue.match(/\/f_(webp|jpeg|jpg|png|gif|bmp|tiff|svg|avif)/i);
+                if (formatMatch) {
+                  ext = formatMatch[1].toLowerCase();
+                }
+              }
+            }
+          } catch {}
+        }
+        if (!ext) ext = 'bin';
+        ext = ext.toLowerCase();
       }
       const urlObj = new URL(urlNoQuery);
       const originalFilename = path.basename(urlObj.pathname); // This preserves %20

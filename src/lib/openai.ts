@@ -76,111 +76,43 @@ interface MiniRequest {
 interface MiniResult {
   url: string;
   alt: string;
-  type: 'ui_screenshot' | 'lifestyle';
-  confidence: number;
 }
 
 export async function analyseImages(
   items: MiniRequest[]
 ): Promise<MiniResult[]> {
-  const batches: MiniRequest[][] = [];
-  for (let i = 0; i < items.length; i += 5) batches.push(items.slice(i, i + 5));
-
   const out: MiniResult[] = [];
 
-  for (const batch of batches) {
-    /* ---------- build single USER prompt ---------- */
-    const payload = batch.map((b) => ({
-      image_url: b.url,
-      context: b.alt || b.context || '',
-    }));
-
-    const messages: OpenAI.ChatCompletionMessageParam[] = [
+  for (const item of items) {
+    const messages = [
       {
-        role: 'user',
-        content: `You are a SaaS marketing expert specialising in website and product images.
-
-Your task is to use vision to analyse the images and write a detailed, marketing-ready alt text.
-
-Input:
-- image_url
-- context related to each image
-
-Step-by-step task:
-1. Use vision to analyse each image thoroughly
-2. Read the context provided by the user
-3. For each image return in JSON format:
-  • "image_url": same URL you received 
-  • "alt": detailed, marketing-ready alt text
-  • "type": "ui_screenshot" | "lifestyle"
-  • "confidence": 0-1 suitability for a product landing page
-
-Respond with JSON only — no markdown.
-
-### INPUT
-${JSON.stringify(payload, null, 2)}`,
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: `You are a SaaS marketing expert. Write a detailed, marketing-ready alt text for this image. Context: ${item.alt || item.context || ""}`,
+          },
+          {
+            type: "image_url",
+            image_url: { url: item.url },
+          },
+        ],
       },
-    ];
-
-    /* ---------- call OpenAI ---------- */
-    /* ----- log FULL user prompt in 1-KB slices ----- */
-    for (let i = 0; i < (messages[0].content || '').length; i += 1024) {
-      console.info(
-        `analyseImages: prompt [${i}-${Math.min(i + 1024, (messages[0].content || '').length)}]`,
-        (messages[0].content || '').slice(i, i + 1024)
-      );
-    }
+    ] as any;
 
     const resp = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      temperature: 0.2,
+      model: "gpt-4o-mini",
       messages,
       max_tokens: 10000,
-      response_format: { type: 'json_object' },
     });
 
-    let raw = '{}';
-    try {
-      const response = resp as any;
-      if (response?.choices?.[0]?.message?.content) {
-        raw = response.choices[0].message.content;
-      }
-    } catch (error) {
-      console.error('analyseImages: error accessing response content', error);
-    }
-    console.info('analyseImages: raw reply →', raw);
-
-    try {
-      const json = JSON.parse(raw);
-      const arr: { image_url?: string; alt?: string; type?: string; confidence?: number }[] = (json.images ?? []) as any[];
-      const batchTyped: MiniRequest[] = batch;
-
-      /* inject real URL if missing */
-      if (arr.length === batchTyped.length) {
-        arr.forEach((it, i) => {
-          if (
-            !it ||
-            !it.image_url ||
-            typeof it.image_url !== 'string' ||
-            (typeof it.image_url === 'string' && it.image_url.startsWith('http') === false)
-          ) {
-            it.image_url = batchTyped[i]?.url ?? '';
-          }
-        });
-      }
-
-      out.push(
-        ...arr.map((it) => ({
-          url: it.image_url ?? '',
-          alt: it.alt ?? '',
-          type: (it.type === 'lifestyle' ? 'lifestyle' : 'ui_screenshot') as 'ui_screenshot' | 'lifestyle',
-          confidence: it.confidence ?? 0,
-        }))
-      );
-    } catch (err) {
-      console.error('analyseImages: JSON parse error', err);
-    }
+    const content = resp.choices[0].message.content || "";
+    out.push({
+      url: item.url,
+      alt: content,
+    });
   }
+
   return out;
 }
 

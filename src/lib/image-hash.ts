@@ -288,7 +288,7 @@ export async function filterS3ImagesByDimension(
       const info = await probe(img.url);
       if (info && (info.width >= 300 || info.height >= 300)) {
         filtered.push(img);
-        if (filtered.length >= 5) break;
+        // Removed the limit of 5 images
       }
     } catch (err) {
       console.info(`filterS3ImagesByDimension: failed to check ${img.url}: ${err}`);

@@ -261,7 +261,8 @@ export async function uploadAllImagesToS3(
         ext = urlNoQuery.split('.').pop()?.toLowerCase() || 'bin';
       }
       const urlObj = new URL(urlNoQuery);
-      const baseName = path.basename(urlObj.pathname, path.extname(urlObj.pathname));
+      const originalFilename = path.basename(urlObj.pathname); // This preserves %20
+      const baseName = originalFilename.replace(path.extname(originalFilename), '');
       const s3Key = `all/${baseName}-${img.hash}.${ext}`;
       await putBinaryObject(s3Key, buffer, `image/${ext}`, 86400);
       const s3Url = `https://${bucket}.s3.amazonaws.com/${s3Key}`;

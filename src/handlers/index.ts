@@ -116,13 +116,10 @@ export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
 
     /* ---------- STEP 5 – GPT-o4-mini analysis (jpeg/png/webp) ---------- */
 
-    // 1 · filter to the formats we care about and check query string formats
+    // 1 · filter to the formats we care about
     const eligible = limitedImgs.filter((img: RawImage & { hash: string }) => {
       // Only allow webp, jpeg, jpg, png
-      const hasValidExtension = /\.(jpe?g|png|webp)(\?|$)/i.test(img.url);
-      // Check query string format parameters (but not for svg)
-      const hasValidQueryFormat = hasValidFormat(img.url);
-      return hasValidExtension || hasValidQueryFormat;
+      return /\.(jpe?g|png|webp)(\?|$)/i.test(img.url);
     });
 
     let analysed: Awaited<ReturnType<typeof analyseImages>> = [];

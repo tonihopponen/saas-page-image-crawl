@@ -230,3 +230,76 @@ export async function convertAvifImagesToWebpAndUpload(
   }
   return out;
 }
+
+/**
+ * Upload all unique images to S3:
+ * - Convert AVIF to WebP, upload, and update URL
+ * - Upload all other formats as-is, update URL
+ * Returns new image list with S3 URLs.
+ */
+export async function uploadAllImagesToS3(
+  imgs: (RawImage & { hash: string })[],
+  bucket: string
+): Promise<(RawImage & { hash: string })[]> {
+  const out: (RawImage & { hash: string })[] = [];
+  for (const img of imgs) {
+    try {
+      const res = await axios.get<ArrayBuffer>(img.url, {
+        responseType: 'arraybuffer',
+        timeout: 10_000,
+      });
+      let buffer: Buffer;
+      let ext: string;
+      if (img.url.toLowerCase().endsWith('.avif')) {
+        buffer = await sharp(Buffer.from(res.data)).webp().toBuffer();
+        ext = 'webp';
+      } else {
+        buffer = Buffer.from(new Uint8Array(res.data));
+        ext = img.url.split('.').pop()?.toLowerCase() || 'bin';
+      }
+      const urlObj = new URL(img.url);
+      const baseName = path.basename(urlObj.pathname, path.extname(urlObj.pathname));
+      const s3Key = `all/${baseName}-${img.hash}.${ext}`;
+      await putBinaryObject(s3Key, buffer, `image/${ext}`, 86400);
+      const s3Url = `https://${bucket}.s3.amazonaws.com/${s3Key}`;
+      out.push({ ...img, url: s3Url });
+    } catch (err) {
+      console.info(`uploadAllImagesToS3: failed to upload ${img.url}: ${err}`);
+      // If upload fails, keep the original image
+      out.push(img);
+    }
+  }
+  return out;
+}
+
+/**
+ * Filter S3 images by dimension (at least one dimension >= 300px), limit to 5.
+ */
+export async function filterS3ImagesByDimension(
+  imgs: (RawImage & { hash: string })[],
+): Promise<(RawImage & { hash: string })[]> {
+  const filtered: (RawImage & { hash: string })[] = [];
+  for (const img of imgs) {
+    try {
+      const res = await axios.get<ArrayBuffer>(img.url, {
+        responseType: 'arraybuffer',
+        timeout: 10_000,
+      });
+      let info;
+      if (img.url.toLowerCase().endsWith('.svg')) {
+        const svgString = Buffer.from(res.data).toString('utf-8');
+        info = await probe(svgString);
+      } else {
+        info = await probe(Buffer.from(new Uint8Array(res.data)));
+      }
+      if (info && (info.width >= 300 || info.height >= 300)) {
+        filtered.push(img);
+        if (filtered.length >= 5) break;
+      }
+    } catch (err) {
+      console.info(`filterS3ImagesByDimension: failed to check ${img.url}: ${err}`);
+      // Optionally, keep images if dimension check fails
+    }
+  }
+  return filtered;
+}

@@ -217,7 +217,7 @@ export async function convertAvifImagesToWebpAndUpload(
         // Upload to S3
         await putBinaryObject(s3Key, webpBuffer, 'image/webp', 86400);
         // Construct the S3 URL (assuming public bucket or CloudFront)
-        const s3Url = `https://${bucket}.s3.amazonaws.com/${s3Key.replace(/ /g, '%20')}`;
+        const s3Url = `https://${bucket}.s3.amazonaws.com/${s3Key.replace(/%20/g, '%2520').replace(/ /g, '%20')}`;
         out.push({ ...img, url: s3Url });
         continue;
       } catch (err) {
@@ -265,7 +265,7 @@ export async function uploadAllImagesToS3(
       const baseName = originalFilename.replace(path.extname(originalFilename), '');
       const s3Key = `all/${baseName}-${img.hash}.${ext}`;
       await putBinaryObject(s3Key, buffer, `image/${ext}`, 86400);
-      const s3Url = `https://${bucket}.s3.amazonaws.com/${s3Key.replace(/ /g, '%20')}`;
+      const s3Url = `https://${bucket}.s3.amazonaws.com/${s3Key.replace(/%20/g, '%2520').replace(/ /g, '%20')}`;
       out.push({ ...img, url: s3Url });
     } catch (err) {
       console.info(`uploadAllImagesToS3: failed to upload ${img.url}: ${err}`);

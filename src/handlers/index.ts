@@ -1,23 +1,75 @@
 import { APIGatewayProxyHandlerV2 } from 'aws-lambda';
+import axios from 'axios';
 
 import { sha256, getObject, putObject } from '../lib/s3';
 import { firecrawlScrape } from '../lib/firecrawl';
-import { filterHomepageLinks, analyseImages } from '../lib/openai';  // ← added analyseImages
+import { filterHomepageLinks, analyseImages } from '../lib/openai';
 import { gptExtractImages } from '../lib/gpt-image-extract';
 import { parseImages, RawImage } from '../lib/html-images';
 import { dedupeImages, filterImages, hasValidFormat, uploadAllImagesToS3, filterS3ImagesByDimension } from '../lib/image-hash';
 
+// Helper function to send webhook notification
+async function sendWebhook(webhookUrl: string, data: any, retries = 3): Promise<void> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      await axios.post(webhookUrl, data, {
+        timeout: 10000,
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'ImageCrawler-Webhook/1.0'
+        }
+      });
+      console.log('Webhook sent successfully to:', webhookUrl);
+      return;
+    } catch (error: any) {
+      console.error(`Webhook attempt ${i + 1} failed:`, error.message);
+      if (i === retries - 1) {
+        console.error('All webhook attempts failed for:', webhookUrl);
+        throw error;
+      }
+      // Wait before retry (exponential backoff)
+      await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 1000));
+    }
+  }
+}
+
 export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
+  const startTime = Date.now();
+  let webhookUrl: string | undefined;
+  let jobId: string | undefined;
+
   try {
     /* ---------- validation ---------- */
     if (!event.body) throw new Error('body missing');
     console.log('Debug: Raw event.body:', event.body);
-    const { url, force_refresh = false } = JSON.parse(event.body);
+    
+    const { url, force_refresh = false, webhook_url, job_id } = JSON.parse(event.body);
     if (!url) throw new Error('url missing');
+    
+    webhookUrl = webhook_url;
+    jobId = job_id || `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
     const u = new URL(url);
     if (!/^https?:$/.test(u.protocol)) throw new Error('url must start with http/https');
     
+    console.log('Debug: Processing job:', jobId);
     console.log('Debug: force_refresh parameter:', force_refresh);
+    console.log('Debug: webhook_url provided:', !!webhookUrl);
+
+    // Send started webhook if URL provided
+    if (webhookUrl) {
+      try {
+        await sendWebhook(webhookUrl, {
+          job_id: jobId,
+          status: 'started',
+          source_url: url,
+          started_at: new Date().toISOString(),
+          message: 'Image crawling process has started'
+        });
+      } catch (error) {
+        console.error('Failed to send started webhook, continuing anyway:', error);
+      }
+    }
 
     // Debug: Check if API keys are set (masked for security)
     const firecrawlKey = process.env.FIRECRAWL_API_KEY;
@@ -51,19 +103,19 @@ export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
     const homepageLinks: string[] = homepage.links ?? [];
 
     // Count how many links Firecrawl gave us
-    console.info('Step 1: Firecrawl link count:', homepageLinks.length);          // 🐞
+    console.info('Step 1: Firecrawl link count:', homepageLinks.length);
 
     // Call GPT to keep only product-image pages
-    const gptRaw = await filterHomepageLinks(homepageLinks);                      // returns string[]
+    const gptRaw = await filterHomepageLinks(homepageLinks);
 
     // Safeguard: if GPT returned a string instead of JSON, log it
     if (!Array.isArray(gptRaw)) {
-      console.warn('Step 2: GPT output was not an array:', gptRaw);               // 🐞
+      console.warn('Step 2: GPT output was not an array:', gptRaw);
     }
 
     // Slice to top-1 and log
     const keptLinks = (Array.isArray(gptRaw) ? gptRaw : []).slice(0, 1);
-    console.info('Step 2: Kept links:', keptLinks);                               // 🐞
+    console.info('Step 2: Kept links:', keptLinks);
 
     /* ---------- STEP 3 – Firecrawl top-1 page ---------- */
     console.log('Step 3: Scraping top pages');
@@ -90,12 +142,12 @@ export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
       console.info('Step 4b: invoking GPT fallback');
       const htmlAll =
         (homepage.rawHtml ?? '') + pages.map((p) => p.rawHTML).join('\n');
-      const gptUrls = await gptExtractImages(htmlAll, url);     // ← text-only call
+      const gptUrls = await gptExtractImages(htmlAll, url);
       imgs = gptUrls.map((u: string) => ({ url: u, landingPage: url }));
       console.info('Step 4b: GPT returned', gptUrls.length, 'URLs');
     }
 
-    const uniqueImgs = await dedupeImages(imgs);   // HEAD + pHash + Content-Length filter
+    const uniqueImgs = await dedupeImages(imgs);
     console.info('Step 4c: unique images after dedupe:', uniqueImgs.length);
     console.info('Step 4c: unique image URLs:', uniqueImgs.map(img => img.url));
 
@@ -143,7 +195,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
     /* build lookup by canonical URL */
     const aiByUrl = new Map(
       analysed
-        .filter((a) => a.url)              // ⬅ skip entries without url
+        .filter((a) => a.url)
         .map((a) => [canon(a.url), a])
     );
 
@@ -158,24 +210,57 @@ export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
     });
 
     console.log('Final: Returning', imagesFinal.length, 'images');
+
+    const result = {
+      job_id: jobId,
+      status: 'completed',
+      source_url: url,
+      generated_at: new Date().toISOString(),
+      processing_time_ms: Date.now() - startTime,
+      images: imagesFinal,
+    };
+
+    // Send success webhook
+    if (webhookUrl) {
+      try {
+        await sendWebhook(webhookUrl, result);
+      } catch (error) {
+        console.error('Failed to send success webhook:', error);
+      }
+    }
+
     /* ---------- FINAL response ---------- */
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        source_url: url,
-        generated_at: new Date().toISOString(),
-        images: imagesFinal,
-      }),
+      body: JSON.stringify(result),
     };
   } catch (err: any) {
     console.error('Lambda error:', err);
+    
+    const errorResult = {
+      job_id: jobId || `error_${Date.now()}`,
+      status: 'failed',
+      source_url: event.body ? JSON.parse(event.body).url : 'unknown',
+      generated_at: new Date().toISOString(),
+      processing_time_ms: Date.now() - startTime,
+      error: err.message ?? 'unknown error',
+      details: err.response?.data || err.stack || 'No additional details'
+    };
+
+    // Send error webhook
+    if (webhookUrl) {
+      try {
+        await sendWebhook(webhookUrl, errorResult);
+      } catch (webhookError) {
+        console.error('Failed to send error webhook:', webhookError);
+      }
+    }
+
     return {
       statusCode: 400,
-      body: JSON.stringify({ 
-        error: err.message ?? 'unknown error',
-        details: err.response?.data || err.stack || 'No additional details'
-      }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(errorResult),
     };
   }
 };
